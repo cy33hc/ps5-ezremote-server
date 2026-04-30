@@ -1,0 +1,40 @@
+#ifndef EZ_CONFIG_H
+#define EZ_CONFIG_H
+
+#include <string>
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <map>
+#include <set>
+
+#include "clients/remote_client.h"
+
+#define APP_ID "ezremote-client"
+#define DATA_PATH "/data/homebrew/" APP_ID
+#define DPI_ELF_PATH DATA_PATH "/ezremote-dpi.elf"
+#define PKG_INSTALL_HISTORY_PATH DATA_PATH "/pkg_install_history.json"
+#define DEBUG_SERVER_LOG_PATH DATA_PATH "/ezremote_server.log"
+
+#define MAX_PKG_HISTORY_RETENTION 2592000000000L
+
+struct PackageInstallHostData
+{
+    std::string http_server_type;
+    std::string username;
+    std::string password;
+    std::string url;
+    std::string path;
+    RemoteClient *remote_client;
+    uint64_t timestamp;
+};
+
+namespace CONFIG
+{
+    PackageInstallHostData* GetPackageInstallHostData(const std::string &hash);
+    void AddPackageInstallHostData(const std::string &hash, PackageInstallHostData pkg_data);
+    void RemovePackageInstallHostData(const std::string &hash);
+    void LoadPackageInstallHostData();
+    void SavePackageInstallHostData();
+}
+#endif
