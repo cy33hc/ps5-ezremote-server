@@ -7,6 +7,8 @@
 #include "httpclient/HTTPClient.h"
 #include "clients/remote_client.h"
 
+#define HTTP_SUCCESS(x) (x >= 200 && x < 300)
+
 class BaseClient : public RemoteClient
 {
 public:
@@ -18,8 +20,6 @@ public:
     std::string GetFullPath(std::string path1);
     const char *LastResponse();
     int Quit();
-    static std::string Escape(const std::string &url);
-    static std::string UnEscape(const std::string &url);
 
 protected:
     CHTTPClient *client;

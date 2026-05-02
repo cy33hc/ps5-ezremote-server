@@ -13,6 +13,7 @@ enum ClientType
     CLIENT_TYPE_WEBDAV,
     CLIENT_TYPE_HTTP_SERVER,
     CLIENT_TYPE_NFS,
+    CLIENT_TYPE_FILEHOST,
     CLINET_TYPE_UNKNOWN
 };
 
@@ -25,7 +26,6 @@ public:
     virtual ~RemoteClient(){};
     virtual int Connect(const std::string &url, const std::string &username, const std::string &password, bool send_ping=false) = 0;
     virtual int GetRange(const std::string &path, DataSink &sink, uint64_t size, uint64_t offset) = 0;
-    virtual std::string GetPath(std::string path1, std::string path2) = 0;
     virtual const char *LastResponse() = 0;
     virtual int Quit() = 0;
 };

@@ -5,6 +5,7 @@
 #include <map>
 #include <vector>
 #include <regex>
+#include <shared_mutex>
 #include <stdlib.h>
 #include <json-c/json.h>
 #include "server/http_server.h"
@@ -18,6 +19,8 @@ static std::map<std::string, PackageInstallHostData> pkg_download_history;
 
 unsigned char cipher_key[32] = {'s', '5', 'v', '8', 'y', '/', 'B', '?', 'E', '(', 'H', '+', 'M', 'b', 'Q', 'e', 'T', 'h', 'W', 'm', 'Z', 'q', '4', 't', '7', 'w', '9', 'z', '$', 'C', '&', 'F'};
 unsigned char cipher_iv[16] = {'Y', 'p', '3', 's', '6', 'v', '9', 'y', '$', 'B', '&', 'E', ')', 'H', '@', 'M'};
+
+std::shared_mutex mutex_;
 
 namespace CONFIG
 {
@@ -61,13 +64,15 @@ namespace CONFIG
 
 	void AddPackageInstallHostData(const std::string &hash, PackageInstallHostData pkg_data)
 	{
+		std::unique_lock<std::shared_mutex> lock(mutex_);
 		std::pair<std::string, PackageInstallHostData> pair = std::make_pair(hash, pkg_data);
-		if (pkg_download_history.find(hash) == pkg_download_history.end())
-		    pkg_download_history.insert(pair);
+		pkg_download_history.erase(hash);
+		pkg_download_history.insert(pair);
 	}
 
 	void RemovePackageInstallHostData(const std::string &hash)
 	{
+		std::unique_lock<std::shared_mutex> lock(mutex_);
 		pkg_download_history.erase(hash);
 	}
 
@@ -88,18 +93,13 @@ namespace CONFIG
                 history_item.path = std::string(json_object_get_string(json_object_object_get(history_item_obj, "path")));
                 history_item.username = std::string(json_object_get_string(json_object_object_get(history_item_obj, "username")));
                 std::string encrypted_password = std::string(json_object_get_string(json_object_object_get(history_item_obj, "password")));
+                history_item.type = json_object_get_int(json_object_object_get(history_item_obj, "type"));
                 history_item.timestamp = json_object_get_uint64(json_object_object_get(history_item_obj, "timestamp"));
 
-                size_t pos = history_item.url.find("://");
-                if (pos != std::string::npos)
+                if (history_item.type == CLIENT_TYPE_HTTP_SERVER)
 		        {
-			        std::string type = history_item.url.substr(0, pos);
-                    if (type.compare("http") == 0 || type.compare("https") ==0)
-                    {
-                        history_item.http_server_type = std::string(json_object_get_string(json_object_object_get(history_item_obj, "http_server_type")));
-                    }
+                    history_item.http_server_type = std::string(json_object_get_string(json_object_object_get(history_item_obj, "http_server_type")));
                 }
-
 
                 int ret = Decrypt(encrypted_password, history_item.password);
                 if (ret == 0)
@@ -113,6 +113,8 @@ namespace CONFIG
 
     void SavePackageInstallHostData()
     {
+        std::unique_lock<std::shared_mutex> lock(mutex_);
+
         if (!FS::FolderExists(DATA_PATH))
         {
             FS::MkDirs(DATA_PATH);
@@ -130,20 +132,18 @@ namespace CONFIG
                 json_object_object_add(history_item_obj, "url", json_object_new_string(it->second.url.c_str()));
                 json_object_object_add(history_item_obj, "path", json_object_new_string(it->second.path.c_str()));
                 json_object_object_add(history_item_obj, "username", json_object_new_string(it->second.username.c_str()));
+                json_object_object_add(history_item_obj, "type", json_object_new_int(it->second.type));
                 json_object_object_add(history_item_obj, "timestamp", json_object_new_uint64(it->second.timestamp));
-
-                size_t pos = it->second.url.find("://");
-                if (pos != std::string::npos)
-		        {
-			        std::string type = it->second.url.substr(0, pos);
-                    if (type.compare("http") == 0 || type.compare("https") ==0)
-                    {
-                        json_object_object_add(history_item_obj, "http_server_type", json_object_new_string(it->second.http_server_type.c_str()));
-                    }
+                if (it->second.type == CLIENT_TYPE_HTTP_SERVER)
+                {
+                    json_object_object_add(history_item_obj, "http_server_type", json_object_new_string(it->second.http_server_type.c_str()));
                 }
 
                 std::string encrypted_password;
-                Encrypt(it->second.password, encrypted_password);
+                if (!it->second.password.empty())
+                {
+                    Encrypt(it->second.password, encrypted_password);
+                }
                 json_object_object_add(history_item_obj, "password", json_object_new_string(encrypted_password.c_str()));
 
                 json_object_array_add(history_list, history_item_obj);

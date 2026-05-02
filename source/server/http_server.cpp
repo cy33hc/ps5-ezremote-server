@@ -3,8 +3,14 @@
 #include "http/httplib.h"
 #include "server/http_server.h"
 #include "clients/remote_client.h"
+#include "clients/archiveorg.h"
 #include "clients/baseclient.h"
+#include "clients/ftpclient.h"
+#include "clients/github.h"
+#include "clients/nfsclient.h"
 #include "clients/smbclient.h"
+#include "clients/sftpclient.h"
+#include "clients/webdav.h"
 #include "config.h"
 #include "util.h"
 
@@ -106,12 +112,8 @@ namespace HttpServer
 
 	bool IsDirectPackageInstallerEnabled()
 	{
-		char buffer[256];
 		in_addr_t in_addr;
-		in_addr_t server_addr;
 		int sockfd;
-		ssize_t i;
-		ssize_t ret;
 		struct hostent *hostent;
 		struct sockaddr_in sockaddr_in;
 		unsigned short server_port = 9040;
@@ -154,10 +156,8 @@ namespace HttpServer
 	{
 		char buffer[8192];
 		in_addr_t in_addr;
-		in_addr_t server_addr;
 		int filefd;
 		int sockfd;
-		ssize_t i;
 		ssize_t read_return;
 		struct hostent *hostent;
 		struct sockaddr_in sockaddr_in;
@@ -225,9 +225,7 @@ namespace HttpServer
 	{
 		char buffer[256];
 		in_addr_t in_addr;
-		in_addr_t server_addr;
 		int sockfd;
-		ssize_t i;
 		ssize_t ret;
 		struct hostent *hostent;
 		struct sockaddr_in sockaddr_in;
@@ -289,21 +287,45 @@ namespace HttpServer
     static RemoteClient *GetRemoteClient(PackageInstallHostData *pkg_host_data)
     {
         RemoteClient *tmp_client = nullptr;
-        size_t pos = pkg_host_data->url.find("://");
-        if (pos == std::string::npos)
-            return nullptr;
-
-        std::string type = pkg_host_data->url.substr(0, pos);
-
-        if (type.compare("http") == 0 || type.compare("https") == 0)
+        if (pkg_host_data->type == CLIENT_TYPE_HTTP_SERVER)
         {
-            tmp_client = new BaseClient();
+            if (pkg_host_data->http_server_type.compare(HTTP_SERVER_GITHUB))
+            {
+                tmp_client = new GithubClient();
+            }
+            else if (pkg_host_data->http_server_type.compare(HTTP_SERVER_ARCHIVEORG))
+            {
+                tmp_client = new ArchiveOrgClient();
+            }
+            else if (pkg_host_data->http_server_type.compare(HTTP_SERVER_APACHE))
+            {
+                tmp_client = new BaseClient();
+            }
+            else if (pkg_host_data->http_server_type.compare(HTTP_SERVER_MS_IIS))
+            {
+                tmp_client = new BaseClient();
+            }
+            else if (pkg_host_data->http_server_type.compare(HTTP_SERVER_NGINX))
+            {
+                tmp_client = new BaseClient();
+            }
+            else if (pkg_host_data->http_server_type.compare(HTTP_SERVER_RCLONE))
+            {
+                tmp_client = new BaseClient();
+            }
+            else if (pkg_host_data->http_server_type.compare(HTTP_SERVER_NPX_SERVE))
+            {
+                tmp_client = new BaseClient();
+            }
         }
-        else if (type.compare("smb") == 0)
+        else if (pkg_host_data->type == CLIENT_TYPE_SMB)
         {
             tmp_client = new SmbClient();
         }
-        /*
+        else if (pkg_host_data->type == CLIENT_TYPE_FILEHOST)
+        {
+            tmp_client = new BaseClient();
+        }
         else if (pkg_host_data->type == CLIENT_TYPE_WEBDAV)
         {
             tmp_client = new WebDAVClient();
@@ -312,16 +334,16 @@ namespace HttpServer
         {
             tmp_client = new SFTPClient();
         }
+        else if (pkg_host_data->type == CLIENT_TYPE_NFS)
+        {
+            tmp_client = new NfsClient();
+        }
         else if (pkg_host_data->type == CLIENT_TYPE_FTP)
         {
             tmp_client = new FtpClient();
             FtpClient *ftp_client = (FtpClient*) tmp_client;
             ftp_client->SetCallbackXferFunction(FtpCallback);
         }
-        else if (pkg_host_data->type == CLIENT_TYPE_NFS)
-        {
-            tmp_client = new NfsClient();
-        }*/
 
         if (tmp_client != nullptr)
             tmp_client->Connect(pkg_host_data->url, pkg_host_data->username, pkg_host_data->password, false);
@@ -406,6 +428,7 @@ namespace HttpServer
             const char *username_param;
             const char *password_param;
             const char *http_server_type_param;
+            int type_param;
 
             json_object *jobj = json_tokener_parse(req.body.c_str());
             if (jobj != nullptr)
@@ -416,6 +439,7 @@ namespace HttpServer
                 username_param  = json_object_get_string(json_object_object_get(jobj, "username"));
                 password_param = json_object_get_string(json_object_object_get(jobj, "password"));
                 http_server_type_param = json_object_get_string(json_object_object_get(jobj, "http_server_type"));
+                type_param = json_object_get_int(json_object_object_get(jobj, "type"));
 
                 if (url_param == nullptr || hash_param == nullptr)
                 {
@@ -434,6 +458,7 @@ namespace HttpServer
                 if (http_server_type_param != nullptr)
                     pkg_data.http_server_type = http_server_type_param;
                 pkg_data.timestamp = Util::GetTick();
+                pkg_data.type = type_param;
 
                 CONFIG::AddPackageInstallHostData(hash_param, pkg_data);
                 CONFIG::SavePackageInstallHostData();
@@ -509,7 +534,7 @@ namespace HttpServer
         svr->set_tcp_nodelay(true);
         svr->set_mount_point("/", "/");
 
-        svr->listen("127.0.0.1", http_server_port);
+        svr->listen("0.0.0.0", http_server_port);
 
         return NULL;
     }

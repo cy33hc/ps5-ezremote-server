@@ -16,16 +16,25 @@
 #define PKG_INSTALL_HISTORY_PATH DATA_PATH "/pkg_install_history.json"
 #define DEBUG_SERVER_LOG_PATH DATA_PATH "/ezremote_server.log"
 
+#define HTTP_SERVER_APACHE "Apache"
+#define HTTP_SERVER_MS_IIS "Microsoft IIS"
+#define HTTP_SERVER_NGINX "Nginx"
+#define HTTP_SERVER_NPX_SERVE "Serve"
+#define HTTP_SERVER_RCLONE "RClone"
+#define HTTP_SERVER_ARCHIVEORG "Archive.org"
+#define HTTP_SERVER_MYRIENT "Myrient"
+#define HTTP_SERVER_GITHUB "Github"
+
 #define MAX_PKG_HISTORY_RETENTION 2592000000000L
 
 struct PackageInstallHostData
 {
+    int type;
     std::string http_server_type;
     std::string username;
     std::string password;
     std::string url;
     std::string path;
-    RemoteClient *remote_client;
     uint64_t timestamp;
 };
 

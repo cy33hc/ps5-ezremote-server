@@ -129,13 +129,3 @@ int SmbClient::GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offset
 
 	return 1;
 }
-
-std::string SmbClient::GetPath(std::string ppath1, std::string ppath2)
-{
-	std::string path1 = ppath1;
-	std::string path2 = ppath2;
-	path1 = Util::Rtrim(Util::Trim(path1, " "), "/");
-	path2 = Util::Rtrim(Util::Trim(path2, " "), "/");
-	path1 = path1 + "/" + path2;
-	return Util::Ltrim(path1, "/");
-}

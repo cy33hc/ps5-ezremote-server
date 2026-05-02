@@ -12,13 +12,8 @@
 #include <inttypes.h>
 #include <errno.h>
 
-#include "lang.h"
 #include "clients/ftpclient.h"
 #include "util.h"
-
-#if defined(EZREMOTE_ENABLE_UI)
-#include "windows.h"
-#endif
 
 #define FTP_CLIENT_BUFSIZ 1048576
 #define ACCEPT_TIMEOUT 30
@@ -76,7 +71,7 @@ int FtpClient::Connect(const std::string &url, const std::string &user, const st
 	{
 		if ((he = gethostbyname(host.c_str())) == NULL)
 		{
-			sprintf(mp_ftphandle->response, "%s", lang_strings[STR_COULD_NOT_RESOLVE_HOST]);
+			sprintf(mp_ftphandle->response, "%s", "Could not resolve hostname");
 			return 0;
 		}
 
@@ -123,7 +118,7 @@ int FtpClient::Connect(const std::string &url, const std::string &user, const st
 	retval = connect(sControl, (sockaddr *)&server_addr, sizeof(server_addr));
 	if (retval == -1)
 	{
-		sprintf(mp_ftphandle->response, "%s", lang_strings[STR_FAIL_TIMEOUT_MSG]);
+		sprintf(mp_ftphandle->response, "%s", "Failed timeout");
 		close(sControl);
 		return 0;
 	}
@@ -158,7 +153,7 @@ int FtpClient::Connect(const std::string &url, const std::string &user, const st
 		else
 		{
 			Quit();
-			sprintf(mp_ftphandle->response, "%s", lang_strings[STR_FAIL_LOGIN_MSG]);
+			sprintf(mp_ftphandle->response, "%s", "Failed login");
 			return 0;
 		}
 	}
@@ -172,7 +167,7 @@ int FtpClient::Connect(const std::string &url, const std::string &user, const st
 	else
 	{
 		Quit();
-		sprintf(mp_ftphandle->response, "%s", lang_strings[STR_FAIL_LOGIN_MSG]);
+		sprintf(mp_ftphandle->response, "%s", "Failed login");
 	}
 
 	return ret;
@@ -323,15 +318,6 @@ char *FtpClient::LastResponse()
 	if ((mp_ftphandle) && (mp_ftphandle->dir == FTP_CLIENT_CONTROL))
 		return mp_ftphandle->response;
 	return NULL;
-}
-
-/*
- * IsConnected - return true if connected to remote
- */
-bool FtpClient::IsConnected()
-{
-	if (mp_ftphandle)
-		return mp_ftphandle->is_connected;
 }
 
 void FtpClient::ClearHandle()
@@ -885,33 +871,6 @@ int FtpClient::FtpXfer(const std::string &localfile, const std::string &path, ft
 }
 
 /*
- * FtpXfer - issue a command and transfer data
- *
- * return 1 if successful, 0 otherwise
- */
-int FtpClient::FtpXfer(SplitFile *split_file, const std::string &path, ftphandle *nControl, accesstype type, transfermode mode)
-{
-	int l, c;
-	char *dbuf;
-	ftphandle *nData;
-
-	if (!FtpAccess(path, type, mode, nControl, &nData))
-	{
-		return 0;
-	}
-
-	dbuf = static_cast<char *>(malloc(FTP_CLIENT_BUFSIZ));
-	while ((l = FtpRead(dbuf, FTP_CLIENT_BUFSIZ, nData)) > 0)
-	{
-		if (split_file->Write(dbuf, l) < 0)
-			break;
-	}
-
-	free(dbuf);
-	return FtpClose(nData);
-}
-
-/*
  * FtpWrite - write to a data connection
  */
 int FtpClient::FtpWrite(void *buf, int len, ftphandle *nData)
@@ -1220,60 +1179,6 @@ int FtpClient::Rmdir(const std::string &path)
 }
 
 /*
- * FtpRmdir - remove directory and all files under directory at remote
- *
- * return 1 if successful, 0 otherwise
- */
-int FtpClient::Rmdir(const std::string &path, bool recursive)
-{
-#if defined(EZREMOTE_ENABLE_UI)
-	if (stop_activity)
-		return 1;
-#endif
-
-	std::vector<DirEntry> list = ListDir(path);
-	int ret;
-	for (int i = 0; i < list.size(); i++)
-	{
-		#if defined(EZREMOTE_ENABLE_UI)
-		if (stop_activity)
-			return 1;
-		#endif
-
-		if (list[i].isDir && recursive)
-		{
-			if (strcmp(list[i].name, "..") == 0)
-				continue;
-			ret = Rmdir(list[i].path, recursive);
-			if (ret == 0)
-			{
-				#if defined(EZREMOTE_ENABLE_UI)
-				sprintf(status_message, "%s %s", lang_strings[STR_FAIL_DEL_DIR_MSG], list[i].path);
-				#endif
-				return 0;
-			}
-		}
-		else
-		{
-			#if defined(EZREMOTE_ENABLE_UI)
-			sprintf(activity_message, "%s %s\n", lang_strings[STR_DELETING], list[i].path);
-			#endif
-			
-			ret = Delete(list[i].path);
-			if (ret == 0)
-			{
-				#if defined(EZREMOTE_ENABLE_UI)
-				sprintf(status_message, "%s %s", lang_strings[STR_FAIL_DEL_FILE_MSG], list[i].path);
-				#endif
-				return 0;
-			}
-		}
-	}
-	ret = Rmdir(path);
-	return 1;
-}
-
-/*
  * FtpSize - determine the size of a remote file
  *
  * return 1 if successful, 0 otherwise
@@ -1323,15 +1228,6 @@ int FtpClient::Get(const std::string &outputfile, const std::string &path, uint6
 		return FtpXfer(outputfile, path, mp_ftphandle, FtpClient::fileread, FtpClient::transfermode::image);
 	else
 		return FtpXfer(outputfile, path, mp_ftphandle, FtpClient::filereadappend, FtpClient::transfermode::image);
-}
-
-int FtpClient::Get(SplitFile *split_file, const std::string &path, uint64_t offset)
-{
-	mp_ftphandle->offset = offset;
-	if (offset == 0)
-		return FtpXfer(split_file, path, mp_ftphandle, FtpClient::fileread, FtpClient::transfermode::image);
-	else
-		return FtpXfer(split_file, path, mp_ftphandle, FtpClient::filereadappend, FtpClient::transfermode::image);
 }
 
 int FtpClient::GetRange(const std::string &path, DataSink &sink, uint64_t size, uint64_t offset)
@@ -1441,331 +1337,6 @@ int FtpClient::Delete(const std::string &path)
 	return 1;
 }
 
-/**
- * @brief Parse directory entry
- * @param[in] line NULL-terminated string
- * @param[out] dirEntry Pointer to a directory entry
- * @return -1 on error or 1 on success
- **/
-
-int FtpClient::ParseDirEntry(char *line, DirEntry *dirEntry)
-{
-	unsigned int i;
-	size_t n;
-	char *p;
-	char *token;
-
-	// Abbreviated months
-	static const char months[13][4] =
-		{
-			"   ",
-			"Jan",
-			"Feb",
-			"Mar",
-			"Apr",
-			"May",
-			"Jun",
-			"Jul",
-			"Aug",
-			"Sep",
-			"Oct",
-			"Nov",
-			"Dec"};
-
-	// Read first field
-	token = strtok_r(line, " \t", &p);
-
-	// Invalid directory entry?
-	if (token == NULL)
-		return -1;
-
-	// MS-DOS listing format?
-	if (isdigit(token[0]))
-	{
-		// Check modification date format
-		if (strlen(token) == 8 && token[2] == '-' && token[5] == '-')
-		{
-			// The format of the date is mm-dd-yy
-			dirEntry->modified.month = (uint8_t)strtoul(token, NULL, 10);
-			dirEntry->modified.day = (uint8_t)strtoul(token + 3, NULL, 10);
-			dirEntry->modified.year = (uint16_t)strtoul(token + 6, NULL, 10) + 2000;
-		}
-		else if (strlen(token) == 10 && token[2] == '/' && token[5] == '/')
-		{
-			// The format of the date is mm/dd/yyyy
-			dirEntry->modified.month = (uint8_t)strtoul(token, NULL, 10);
-			dirEntry->modified.day = (uint8_t)strtoul(token + 3, NULL, 10);
-			dirEntry->modified.year = (uint16_t)strtoul(token + 6, NULL, 10);
-		}
-		else
-		{
-			// Invalid time format
-			return -1;
-		}
-
-		// Read modification time
-		token = strtok_r(NULL, " ", &p);
-		// Invalid directory entry?
-		if (token == NULL)
-			return -1;
-
-		// Check modification time format
-		if (strlen(token) >= 5 && token[2] == ':')
-		{
-			// The format of the time hh:mm
-			dirEntry->modified.hours = (uint8_t)strtoul(token, NULL, 10);
-			dirEntry->modified.minutes = (uint8_t)strtoul(token + 3, NULL, 10);
-
-			// The PM period covers the 12 hours from noon to midnight
-			if (strstr(token, "PM") != NULL)
-			{
-				dirEntry->modified.hours += 12;
-			}
-		}
-		else
-		{
-			// Invalid time format
-			return -1;
-		}
-
-		// Read next field
-		token = strtok_r(NULL, " ", &p);
-		// Invalid directory entry?
-		if (token == NULL)
-			return -1;
-
-		// Check whether the current entry is a directory
-		if (!strcmp(token, "<DIR>"))
-		{
-			// Update attributes
-			dirEntry->isDir |= true;
-		}
-		else
-		{
-			// Save the size of the file
-			dirEntry->file_size = strtoul(token, NULL, 10);
-		}
-
-		// Read filename field
-		token = strtok_r(NULL, "\r\n", &p);
-		// Invalid directory entry?
-		if (token == NULL)
-			return -1;
-
-		// Retrieve the length of the filename
-		n = strlen(token);
-		// Limit the number of characters to copy
-		n = MIN(n, FTP_CLIENT_MAX_FILENAME_LEN);
-
-		// Copy the filename
-		strncpy(dirEntry->name, token, n);
-		// Properly terminate the string with a NULL character
-		dirEntry->name[n] = '\0';
-	}
-	// Unix listing format?
-	else
-	{
-		// Check file permissions
-		if (strchr(token, 'd') != NULL)
-		{
-			dirEntry->isDir = true;
-		}
-
-		// Read next field
-		token = strtok_r(NULL, " ", &p);
-		// Invalid directory entry?
-		if (token == NULL)
-			return -1;
-
-		// Discard owner field
-		token = strtok_r(NULL, " ", &p);
-		// Invalid directory entry?
-		if (token == NULL)
-			return -1;
-
-		// Discard group field
-		token = strtok_r(NULL, " ", &p);
-		// Invalid directory entry?
-		if (token == NULL)
-			return -1;
-
-		// Read size field
-		token = strtok_r(NULL, " ", &p);
-		// Invalid directory entry?
-		if (token == NULL)
-			return -1;
-
-		// Save the size of the file
-		dirEntry->file_size = strtoul(token, NULL, 10);
-
-		// Read modification time (month)
-		token = strtok_r(NULL, " ", &p);
-		// Invalid directory entry?
-		if (token == NULL)
-			return -1;
-
-		// Decode the 3-letter month name
-		for (i = 1; i <= 12; i++)
-		{
-			// Compare month name
-			if (!strcmp(token, months[i]))
-			{
-				// Save month number
-				dirEntry->modified.month = i;
-				break;
-			}
-		}
-
-		// Read modification time (day)
-		token = strtok_r(NULL, " ", &p);
-		// Invalid directory entry?
-		if (token == NULL)
-			return -1;
-
-		// Save day number
-		dirEntry->modified.day = (uint8_t)strtoul(token, NULL, 10);
-
-		// Read next field
-		token = strtok_r(NULL, " ", &p);
-		// Invalid directory entry?
-		if (token == NULL)
-			return -1;
-
-		// Check modification time format
-		if (strlen(token) == 4)
-		{
-			// The format of the year is yyyy
-			dirEntry->modified.year = (uint16_t)strtoul(token, NULL, 10);
-		}
-		else if (strlen(token) == 5)
-		{
-			// The format of the time hh:mm
-			token[2] = '\0';
-			dirEntry->modified.hours = (uint8_t)strtoul(token, NULL, 10);
-			dirEntry->modified.minutes = (uint8_t)strtoul(token + 3, NULL, 10);
-			dirEntry->modified.year = cur_time.tm_year + 1900;
-		}
-		else
-		{
-			// Invalid time format
-			return -1;
-		}
-
-		// Read filename field
-		token = strtok_r(NULL, "\r\n", &p);
-		// Invalid directory entry?
-		if (token == NULL)
-			return -1;
-
-		// Retrieve the length of the filename
-		n = strlen(token);
-		// Limit the number of characters to copy
-		n = MIN(n, FTP_CLIENT_MAX_FILENAME_LEN);
-
-		// Copy the filename
-		strncpy(dirEntry->name, token, n);
-		// Properly terminate the string with a NULL character
-		dirEntry->name[n] = '\0';
-	}
-
-	// The directory entry is valid
-	return 1;
-}
-
-int FtpClient::ParseMLSDDirEntry(char *line, DirEntry *dirEntry)
-{
-	char *p;
-	char *token;
-	char *facts;
-	char *keypair;
-	char key[128];
-	char value[128];
-
-	// Spilt string by space
-	facts = strtok_r(line, " ", &p);
-
-	// path is the rest of the line after space
-	token = strtok_r(p, "\r\n", &p);
-	snprintf(dirEntry->name, 256, "%s", token);
-
-	// split properties by semi-colon and get the key value pair
-	while ((keypair = strtok_r(facts, ";", &facts)))
-	{
-		sscanf(keypair, "%[^=]=%s", key, value);
-		if (strcasecmp(key, "type") == 0)
-		{
-			dirEntry->isDir = false;
-			if (strcasecmp(value, "dir") == 0)
-			{
-				dirEntry->isDir = true;
-			}
-		}
-		else if (strcasecmp(key, "size") == 0)
-		{
-			dirEntry->file_size = atoll(value);
-		}
-		else if (strcasecmp(key, "modify") == 0)
-		{
-			sscanf(value, "%4d%2d%2d%2d%2d%2d", &dirEntry->modified.year, &dirEntry->modified.month, &dirEntry->modified.day,
-				   &dirEntry->modified.hours, &dirEntry->modified.minutes, &dirEntry->modified.seconds);
-		}
-	}
-	return 1;
-}
-
-std::vector<DirEntry> FtpClient::ListDir(const std::string &path)
-{
-	std::vector<DirEntry> out;
-	DirEntry entry;
-	Util::SetupPreviousFolder(path, &entry);
-	out.push_back(entry);
-
-	ftphandle *nData;
-	char buf[1024];
-	int ret;
-	mp_ftphandle->offset = 0;
-
-	Chdir(path);
-	nData = RawOpen("", FtpClient::dirverbose, FtpClient::ascii);
-	if (nData != NULL)
-	{
-		ret = FtpRead(buf, 1024, nData);
-		while (ret > 0)
-		{
-			DirEntry entry;
-			memset(&entry, 0, sizeof(entry));
-			entry.selectable = true;
-			if (ParseDirEntry(buf, &entry) > 0)
-			{
-				sprintf(entry.directory, "%s", path.c_str());
-				if (path.length() > 0 && path[path.length() - 1] == '/')
-				{
-					sprintf(entry.path, "%s%s", path.c_str(), entry.name);
-				}
-				else
-				{
-					sprintf(entry.path, "%s/%s", path.c_str(), entry.name);
-				}
-
-				if (entry.isDir)
-				{
-					sprintf(entry.display_size, "%s", lang_strings[STR_FOLDER]);
-				}
-				else
-				{
-					DirEntry::SetDisplaySize(&entry);
-				}
-				if (strcmp(entry.name, "..") != 0 && strcmp(entry.name, ".") != 0)
-					out.push_back(entry);
-			}
-			ret = FtpRead(buf, 1024, nData);
-		}
-		FtpClose(nData);
-	}
-
-	return out;
-}
-
 void FtpClient::SetCallbackXferFunction(FtpCallbackXfer pointer)
 {
 	mp_ftphandle->xfercb = pointer;
@@ -1786,38 +1357,6 @@ long FtpClient::GetIdleTime()
 	timeval now;
 	gettimeofday(&now, NULL);
 	return now.tv_usec - tick.tv_usec;
-}
-
-ClientType FtpClient::clientType()
-{
-	return CLIENT_TYPE_FTP;
-}
-
-uint32_t FtpClient::SupportedActions()
-{
-	return REMOTE_ACTION_ALL ^ REMOTE_ACTION_CUT ^ REMOTE_ACTION_COPY ^ REMOTE_ACTION_PASTE ^ REMOTE_ACTION_RAW_READ;
-}
-
-std::string FtpClient::GetPath(std::string ppath1, std::string ppath2)
-{
-	std::string path1 = ppath1;
-	std::string path2 = ppath2;
-	path1 = Util::Rtrim(Util::Trim(path1, " "), "/");
-	path2 = Util::Rtrim(Util::Trim(path2, " "), "/");
-	path1 = path1 + "/" + path2;
-	return path1;
-}
-
-int FtpClient::Copy(const std::string &from, const std::string &to)
-{
-	sprintf(mp_ftphandle->response, "%s", lang_strings[STR_UNSUPPORTED_OPERATION_MSG]);
-	return 0;
-}
-
-int FtpClient::Move(const std::string &from, const std::string &to)
-{
-	sprintf(mp_ftphandle->response, "%s", lang_strings[STR_UNSUPPORTED_OPERATION_MSG]);
-	return 0;
 }
 
 int FtpClient::Head(const std::string &path, void *buffer, uint64_t len)

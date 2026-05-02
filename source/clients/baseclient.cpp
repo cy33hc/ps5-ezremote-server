@@ -102,38 +102,3 @@ int BaseClient::Quit()
     }
     return 1;
 }
-
-std::string BaseClient::Escape(const std::string &url)
-{
-    CURL *curl = curl_easy_init();
-    if (curl)
-    {
-        char *output = curl_easy_escape(curl, url.c_str(), url.length());
-        if (output)
-        {
-            std::string encoded_url = std::string(output);
-            curl_free(output);
-            return encoded_url;
-        }
-        curl_easy_cleanup(curl);
-    }
-    return "";
-}
-
-std::string BaseClient::UnEscape(const std::string &url)
-{
-    CURL *curl = curl_easy_init();
-    if (curl)
-    {
-        int decode_len;
-        char *output = curl_easy_unescape(curl, url.c_str(), url.length(), &decode_len);
-        if (output)
-        {
-            std::string decoded_url = std::string(output, decode_len);
-            curl_free(output);
-            return decoded_url;
-        }
-        curl_easy_cleanup(curl);
-    }
-    return "";
-}

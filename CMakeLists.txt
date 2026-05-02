@@ -17,6 +17,10 @@ add_executable(${PROJECT_NAME}.elf
   source/server/http_server.cpp
   source/clients/archiveorg.cpp
   source/clients/baseclient.cpp
+  source/clients/ftpclient.cpp
+  source/clients/github.cpp
+  source/clients/sftpclient.cpp
+  source/clients/nfsclient.cpp
   source/clients/smbclient.cpp
   source/clients/webdav.cpp
   source/config.cpp
@@ -37,6 +41,8 @@ target_link_libraries(${PROJECT_NAME}.elf
   curl
   json-c
   smb2
+  ssh2
+  nfs
   SceSysCore
   kernel_sys
   SceAppInstUtil

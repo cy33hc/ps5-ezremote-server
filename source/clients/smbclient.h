@@ -22,7 +22,6 @@ public:
 	int GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offset);
 	const char *LastResponse();
 	int Quit();
-	std::string GetPath(std::string ppath1, std::string ppath2);
 
 private:
 	struct smb2_context *smb2;

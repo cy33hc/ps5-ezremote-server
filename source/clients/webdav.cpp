@@ -3,12 +3,7 @@
 #include <sys/time.h>
 #include "clients/remote_client.h"
 #include "clients/webdav.h"
-#include "pugixml/pugiext.hpp"
 #include "util.h"
-
-#if defined(EZREMOTE_ENABLE_UI)
-#include "windows.h"
-#endif
 
 std::string WebDAVClient::GetHttpUrl(std::string url)
 {
