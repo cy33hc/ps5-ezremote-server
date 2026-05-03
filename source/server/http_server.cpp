@@ -6,7 +6,6 @@
 #include "clients/archiveorg.h"
 #include "clients/baseclient.h"
 #include "clients/ftpclient.h"
-#include "clients/github.h"
 #include "clients/nfsclient.h"
 #include "clients/smbclient.h"
 #include "clients/sftpclient.h"
@@ -289,11 +288,7 @@ namespace HttpServer
         RemoteClient *tmp_client = nullptr;
         if (pkg_host_data->type == CLIENT_TYPE_HTTP_SERVER)
         {
-            if (pkg_host_data->http_server_type.compare(HTTP_SERVER_GITHUB))
-            {
-                tmp_client = new GithubClient();
-            }
-            else if (pkg_host_data->http_server_type.compare(HTTP_SERVER_ARCHIVEORG))
+            if (pkg_host_data->http_server_type.compare(HTTP_SERVER_ARCHIVEORG))
             {
                 tmp_client = new ArchiveOrgClient();
             }

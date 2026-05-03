@@ -18,7 +18,6 @@ add_executable(${PROJECT_NAME}.elf
   source/clients/archiveorg.cpp
   source/clients/baseclient.cpp
   source/clients/ftpclient.cpp
-  source/clients/github.cpp
   source/clients/sftpclient.cpp
   source/clients/nfsclient.cpp
   source/clients/smbclient.cpp
