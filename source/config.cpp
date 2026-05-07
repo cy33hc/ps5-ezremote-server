@@ -108,6 +108,7 @@ namespace CONFIG
                 }
                 AddPackageInstallHostData(hash, history_item);
             }
+            json_object_put(jobj);
         }
     }
 
@@ -151,5 +152,6 @@ namespace CONFIG
         }
         
         json_object_to_file(PKG_INSTALL_HISTORY_PATH, history_list);
+        json_object_put(history_list);
     }
 }
