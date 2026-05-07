@@ -9,11 +9,10 @@
 class WebDAVClient : public BaseClient
 {
 public:
-    int Connect(const std::string &url, const std::string &user, const std::string &pass, bool send_ping=false);
+    int Connect(const std::string &url, const std::string &user, const std::string &pass);
     
 private:
     static std::string GetHttpUrl(std::string url);
-    bool PropFind(const std::string &path, int depth, CHTTPClient::HttpResponse &res);
 };
 
 #endif

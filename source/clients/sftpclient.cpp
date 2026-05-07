@@ -19,7 +19,7 @@ SFTPClient::SFTPClient()
 
 SFTPClient::~SFTPClient(){};
 
-int SFTPClient::Connect(const std::string &url, const std::string &username, const std::string &password, bool send_ping)
+int SFTPClient::Connect(const std::string &url, const std::string &username, const std::string &password)
 {
     int port = 22;
     std::string host = url.substr(7);

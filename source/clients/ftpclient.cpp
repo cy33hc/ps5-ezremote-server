@@ -47,7 +47,7 @@ FtpClient::~FtpClient()
 	free(mp_ftphandle);
 }
 
-int FtpClient::Connect(const std::string &url, const std::string &user, const std::string &pass, bool send_ping)
+int FtpClient::Connect(const std::string &url, const std::string &user, const std::string &pass)
 {
 	int port = 21;
 	std::string host = url.substr(6);

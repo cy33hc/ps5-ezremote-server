@@ -21,7 +21,7 @@ SmbClient::~SmbClient()
 {
 }
 
-int SmbClient::Connect(const std::string &url, const std::string &user, const std::string &pass, bool send_ping)
+int SmbClient::Connect(const std::string &url, const std::string &user, const std::string &pass)
 {
 	struct smb2_url *smb_url;
 
@@ -52,8 +52,6 @@ int SmbClient::Connect(const std::string &url, const std::string &user, const st
 	}
 
 	smb2_destroy_url(smb_url);
-	//max_read_size = smb2_get_max_read_size(smb2);
-	//max_write_size = smb2_get_max_write_size(smb2);
 	connected = true;
 
 	return 1;

@@ -12,7 +12,6 @@
 
 #define APP_ID "ezremote-client"
 #define DATA_PATH "/data/homebrew/" APP_ID
-#define DPI_ELF_PATH DATA_PATH "/ezremote-dpi.elf"
 #define PKG_INSTALL_HISTORY_PATH DATA_PATH "/pkg_install_history.json"
 #define DEBUG_SERVER_LOG_PATH DATA_PATH "/ezremote_server.log"
 

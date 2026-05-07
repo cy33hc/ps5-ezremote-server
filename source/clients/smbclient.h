@@ -17,7 +17,7 @@ class SmbClient : public RemoteClient
 public:
 	SmbClient();
 	~SmbClient();
-	int Connect(const std::string &url, const std::string &user, const std::string &pass, bool send_ping=false);
+	int Connect(const std::string &url, const std::string &user, const std::string &pass);
 	int GetRange(const std::string &path, DataSink &sink, uint64_t size, uint64_t offset);
 	int GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offset);
 	const char *LastResponse();

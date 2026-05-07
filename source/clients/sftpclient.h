@@ -12,7 +12,7 @@ class SFTPClient : public RemoteClient
 public:
     SFTPClient();
     ~SFTPClient();
-    int Connect(const std::string &url, const std::string &username, const std::string &password, bool send_ping=false);
+    int Connect(const std::string &url, const std::string &username, const std::string &password);
     int GetRange(const std::string &path, DataSink &sink, uint64_t size, uint64_t offset);
     int GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offset);
     const char *LastResponse();

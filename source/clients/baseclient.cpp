@@ -19,7 +19,7 @@ BaseClient::~BaseClient()
         delete client;
 };
 
-int BaseClient::Connect(const std::string &url, const std::string &username, const std::string &password, bool send_ping)
+int BaseClient::Connect(const std::string &url, const std::string &username, const std::string &password)
 {
     this->host_url = url;
     size_t scheme_pos = url.find("://");

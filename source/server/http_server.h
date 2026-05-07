@@ -10,9 +10,6 @@ extern int http_server_port;
 
 namespace HttpServer
 {
-    bool IsDirectPackageInstallerEnabled();
-    int StartDirectPackageInstaller();
-    int InstallWithDirectPackageInstaller(const std::string &url);
     void *ServerThread(void *argp);
     void Start();
     void Stop();

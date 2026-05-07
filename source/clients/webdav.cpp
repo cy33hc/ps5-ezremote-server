@@ -12,8 +12,8 @@ std::string WebDAVClient::GetHttpUrl(std::string url)
     return http_url;
 }
 
-int WebDAVClient::Connect(const std::string &host, const std::string &user, const std::string &pass, bool send_ping)
+int WebDAVClient::Connect(const std::string &host, const std::string &user, const std::string &pass)
 {
     std::string url = GetHttpUrl(host);
-    return BaseClient::Connect(url, user, pass, send_ping);
+    return BaseClient::Connect(url, user, pass);
 }

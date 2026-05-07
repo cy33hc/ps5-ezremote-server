@@ -9,7 +9,7 @@
 class ArchiveOrgClient : public BaseClient
 {
 public:
-    int Connect(const std::string &url, const std::string &username, const std::string &password, bool send_ping=false);
+    int Connect(const std::string &url, const std::string &username, const std::string &password);
 
 private:
     int Login(const std::string &username, const std::string &password);

@@ -14,7 +14,7 @@ class BaseClient : public RemoteClient
 public:
     BaseClient();
     ~BaseClient();
-    int Connect(const std::string &url, const std::string &username, const std::string &password, bool send_ping=false);
+    int Connect(const std::string &url, const std::string &username, const std::string &password);
     int GetRange(const std::string &path, DataSink &sink, uint64_t size, uint64_t offset);
     std::string GetPath(std::string path1, std::string path2);
     std::string GetFullPath(std::string path1);
