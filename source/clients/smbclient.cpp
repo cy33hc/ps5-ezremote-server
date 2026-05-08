@@ -10,6 +10,8 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <errno.h>
+#include "config.h"
+#include "fs.h"
 #include "clients/smbclient.h"
 #include "util.h"
 
@@ -77,6 +79,55 @@ int SmbClient::Quit()
 	connected = false;
 	return 1;
 }
+/*
+ * SmbGet - issue a GET command and write received data to output
+ *
+ * return 1 if successful, 0 otherwise
+ */
+
+int SmbClient::Get(const std::string &outputfile, const std::string &ppath, uint64_t offset)
+{
+	std::string path = std::string(ppath);
+	path = Util::Trim(path, "/");
+
+	struct smb2fh* in = smb2_open(smb2, path.c_str(), O_RDONLY);
+	if (in == NULL)
+	{
+		sprintf(response, "%s", smb2_get_error(smb2));
+		return 0;
+	}
+
+	FILE* out = FS::Create(outputfile);
+	if (out == NULL)
+	{
+		// sprintf(response, "%s", lang_strings[STR_FAILED]);
+		return 0;
+	}
+
+	uint8_t *buff = (uint8_t*)malloc(max_read_size);
+	int count = 0;
+	*g_bytes_transfered = 0;
+
+	while ((count = smb2_read(smb2, in, buff, max_read_size)) > 0)
+	{
+		if (count < 0)
+		{
+			sprintf(response, "%s", smb2_get_error(smb2));
+			FS::Close(out);
+			smb2_close(smb2, in);
+			free((void*)buff);
+			return 0;
+		}
+		FS::Write(out, buff, count);
+		*g_bytes_transfered += count;
+	}
+
+	FS::Close(out);
+	smb2_close(smb2, in);
+	free((void*)buff);
+	return 1;
+}
+
 
 int SmbClient::GetRange(const std::string &ppath, DataSink &sink, uint64_t size, uint64_t offset)
 {

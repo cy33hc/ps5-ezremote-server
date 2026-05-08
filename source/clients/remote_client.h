@@ -25,6 +25,7 @@ public:
     RemoteClient(){};
     virtual ~RemoteClient(){};
     virtual int Connect(const std::string &url, const std::string &username, const std::string &password) = 0;
+    virtual int Get(const std::string &outputfile, const std::string &path, uint64_t offset=0) = 0;
     virtual int GetRange(const std::string &path, DataSink &sink, uint64_t size, uint64_t offset) = 0;
     virtual const char *LastResponse() = 0;
     virtual int Quit() = 0;

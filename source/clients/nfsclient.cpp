@@ -82,6 +82,56 @@ int NfsClient::Quit()
 	return 1;
 }
 
+/*
+ * Get - issue a GET command and write received data to output
+ *
+ * return 1 if successful, 0 otherwise
+ */
+
+int NfsClient::Get(const std::string &outputfile, const std::string &ppath, uint64_t offset)
+{
+	struct nfsfh *nfsfh = nullptr;
+	int ret = nfs_open(nfs, ppath.c_str(), 0400, &nfsfh);
+	if (ret != 0)
+	{
+		sprintf(response, "%s", nfs_get_error(nfs));
+		return 0;
+	}
+
+	FILE* out = FS::Create(outputfile);
+	if (out == NULL)
+	{
+		// sprintf(response, "%s", lang_strings[STR_FAILED]);
+		return 0;
+	}
+
+	void *buff = malloc(BUF_SIZE);
+	int count = 0;
+	*g_bytes_transfered = 0;
+
+	while ((count = nfs_read(nfs, nfsfh, BUF_SIZE, buff)) > 0)
+	{
+		if (count < 0)
+		{
+			sprintf(response, "%s", nfs_get_error(nfs));
+			FS::Close(out);
+			nfs_close(nfs, nfsfh);
+			free((void*)buff);
+			return 0;
+		}
+		FS::Write(out, buff, count);
+		*g_bytes_transfered += count;
+	}
+
+	FS::Close(out);
+	nfs_close(nfs, nfsfh);
+	free((void*)buff);
+
+	return 1;
+}
+
+
+
 int NfsClient::GetRange(const std::string &path, DataSink &sink, uint64_t size, uint64_t offset)
 {
 	struct nfsfh *nfsfh = nullptr;

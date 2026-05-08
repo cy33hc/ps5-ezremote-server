@@ -7,6 +7,7 @@
 #include "clients/remote_client.h"
 #include "clients/sftpclient.h"
 #include "fs.h"
+#include "config.h"
 
 #define FTP_CLIENT_BUFSIZ 1048576
 
@@ -182,6 +183,49 @@ shutdown:
     sock = 0;
     return 0;
 }
+
+int SFTPClient::Get(const std::string &outputfile, const std::string &path, uint64_t offset)
+{
+    LIBSSH2_SFTP_HANDLE *sftp_handle = libssh2_sftp_open(sftp_session, path.c_str(), LIBSSH2_FXF_READ, 0);
+    if (!sftp_handle)
+    {
+        sprintf(response, "Unable to open file with SFTP: %ld", libssh2_sftp_last_error(sftp_session));
+        return 0;
+    }
+
+    FILE *out = FS::Create(outputfile);
+    if (out == NULL)
+    {
+        // sprintf(response, "%s", lang_strings[STR_FAILED]);
+        return 0;
+    }
+
+    char *buff = (char *)malloc(FTP_CLIENT_BUFSIZ);
+    int rc, count = 0;
+    *g_bytes_transfered = 0;
+
+    do
+    {
+        rc = libssh2_sftp_read(sftp_handle, buff, FTP_CLIENT_BUFSIZ);
+        if (rc > 0)
+        {
+            *g_bytes_transfered  += rc;
+            FS::Write(out, buff, rc);
+        }
+        else
+        {
+            break;
+        }
+    } while (1);
+
+    free((char *)buff);
+    FS::Close(out);
+    libssh2_sftp_close(sftp_handle);
+
+    return 1;
+}
+
+
 
 int SFTPClient::GetRange(const std::string &path, DataSink &sink, uint64_t size, uint64_t offset)
 {

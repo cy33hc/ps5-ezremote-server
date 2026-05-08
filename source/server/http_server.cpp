@@ -20,8 +20,21 @@
 
 using namespace httplib;
 
+enum DownloadState { STATE_PENDING, STATE_DOWNLOADING, STATE_FAILED, STATE_SUCCESS };
+
+struct BgDownloadData {
+    HostInfo host_info;
+    std::string src_path;
+    std::string dest_path;
+    uint64_t bytes_transfered;
+    uint64_t file_size;
+    DownloadState state;
+};
+
 Server *svr;
 int http_server_port = 6701;
+static std::vector<BgDownloadData> bg_download_list;
+static pthread_t bg_download_thread;
 
 namespace HttpServer
 {
@@ -109,57 +122,57 @@ namespace HttpServer
         return;
     }
 
-    static RemoteClient *GetRemoteClient(PackageInstallHostData *pkg_host_data)
+    static RemoteClient *GetRemoteClient(HostInfo *host_info)
     {
         RemoteClient *tmp_client = nullptr;
-        if (pkg_host_data->type == CLIENT_TYPE_HTTP_SERVER)
+        if (host_info->type == CLIENT_TYPE_HTTP_SERVER)
         {
-            if (pkg_host_data->http_server_type.compare(HTTP_SERVER_ARCHIVEORG))
+            if (host_info->http_server_type.compare(HTTP_SERVER_ARCHIVEORG))
             {
                 tmp_client = new ArchiveOrgClient();
             }
-            else if (pkg_host_data->http_server_type.compare(HTTP_SERVER_APACHE))
+            else if (host_info->http_server_type.compare(HTTP_SERVER_APACHE))
             {
                 tmp_client = new BaseClient();
             }
-            else if (pkg_host_data->http_server_type.compare(HTTP_SERVER_MS_IIS))
+            else if (host_info->http_server_type.compare(HTTP_SERVER_MS_IIS))
             {
                 tmp_client = new BaseClient();
             }
-            else if (pkg_host_data->http_server_type.compare(HTTP_SERVER_NGINX))
+            else if (host_info->http_server_type.compare(HTTP_SERVER_NGINX))
             {
                 tmp_client = new BaseClient();
             }
-            else if (pkg_host_data->http_server_type.compare(HTTP_SERVER_RCLONE))
+            else if (host_info->http_server_type.compare(HTTP_SERVER_RCLONE))
             {
                 tmp_client = new BaseClient();
             }
-            else if (pkg_host_data->http_server_type.compare(HTTP_SERVER_NPX_SERVE))
+            else if (host_info->http_server_type.compare(HTTP_SERVER_NPX_SERVE))
             {
                 tmp_client = new BaseClient();
             }
         }
-        else if (pkg_host_data->type == CLIENT_TYPE_SMB)
+        else if (host_info->type == CLIENT_TYPE_SMB)
         {
             tmp_client = new SmbClient();
         }
-        else if (pkg_host_data->type == CLIENT_TYPE_FILEHOST)
+        else if (host_info->type == CLIENT_TYPE_FILEHOST)
         {
             tmp_client = new BaseClient();
         }
-        else if (pkg_host_data->type == CLIENT_TYPE_WEBDAV)
+        else if (host_info->type == CLIENT_TYPE_WEBDAV)
         {
             tmp_client = new WebDAVClient();
         }
-        else if (pkg_host_data->type == CLIENT_TYPE_SFTP)
+        else if (host_info->type == CLIENT_TYPE_SFTP)
         {
             tmp_client = new SFTPClient();
         }
-        else if (pkg_host_data->type == CLIENT_TYPE_NFS)
+        else if (host_info->type == CLIENT_TYPE_NFS)
         {
             tmp_client = new NfsClient();
         }
-        else if (pkg_host_data->type == CLIENT_TYPE_FTP)
+        else if (host_info->type == CLIENT_TYPE_FTP)
         {
             tmp_client = new FtpClient();
             FtpClient *ftp_client = (FtpClient*) tmp_client;
@@ -167,7 +180,7 @@ namespace HttpServer
         }
 
         if (tmp_client != nullptr)
-            tmp_client->Connect(pkg_host_data->url, pkg_host_data->username, pkg_host_data->password);
+            tmp_client->Connect(host_info->url, host_info->username, host_info->password);
 
         return tmp_client;
     }
@@ -177,7 +190,33 @@ namespace HttpServer
         tmp_client->Quit();
         delete tmp_client;
     }
-    
+
+    void *DownloadFilesThread(void *argp)
+    {
+        while (true)
+        {
+            for (auto it = bg_download_list.begin(); it != bg_download_list.end(); ++it)
+            {
+                if (it->state == STATE_PENDING)
+                {
+                    RemoteClient *tmp_client = GetRemoteClient(&(it->host_info));
+                    g_bytes_transfered = &(it->bytes_transfered);
+                    it->state = STATE_DOWNLOADING;
+                    int ret = tmp_client->Get(it->dest_path, it->src_path);
+                    if (ret == 0)
+                        it->state = STATE_FAILED;
+                    else
+                        it->state = STATE_SUCCESS;
+                    DeleteRemoteClient(tmp_client);
+                }
+            }
+
+            sleep(1);
+        }
+
+        return nullptr;
+    }
+
     void *ServerThread(void *argp)
     {
         svr->Get("/", [&](const Request &req, Response &res)
@@ -210,18 +249,18 @@ namespace HttpServer
                     return;
                 }
 
-                PackageInstallHostData pkg_data;
-                pkg_data.url = url_param;
+                PackageInstallData pkg_data;
+                pkg_data.host_info.url = url_param;
                 if (username_param != nullptr)
-                    pkg_data.username = username_param;
+                    pkg_data.host_info.username = username_param;
                 if (password_param != nullptr)
-                    pkg_data.password = password_param;
+                    pkg_data.host_info.password = password_param;
                 if (path_param != nullptr)
                     pkg_data.path = path_param;
                 if (http_server_type_param != nullptr)
-                    pkg_data.http_server_type = http_server_type_param;
+                    pkg_data.host_info.http_server_type = http_server_type_param;
                 pkg_data.timestamp = Util::GetTick();
-                pkg_data.type = type_param;
+                pkg_data.host_info.type = type_param;
 
                 CONFIG::AddPackageInstallHostData(hash_param, pkg_data);
                 CONFIG::SavePackageInstallHostData();
@@ -231,7 +270,7 @@ namespace HttpServer
         svr->Get("/bg_install/(.*)", [&](const Request &req, Response &res)
         {
             std::string hash = req.matches[1];
-            PackageInstallHostData* pkg_host_data = CONFIG::GetPackageInstallHostData(hash);
+            PackageInstallData* pkg_host_data = CONFIG::GetPackageInstallHostData(hash);
 
             if (pkg_host_data == nullptr)
             {
@@ -239,7 +278,7 @@ namespace HttpServer
                 return;
             }
 
-            RemoteClient *tmp_client = GetRemoteClient(pkg_host_data);
+            RemoteClient *tmp_client = GetRemoteClient(&(pkg_host_data->host_info));
             if (tmp_client == nullptr)
             {
                 res.status = 500;
@@ -265,6 +304,74 @@ namespace HttpServer
 
         });
 
+        svr->Post("/download_url", [&](const Request &req, Response &res)
+        {
+            int type_param;
+            const char *url_param;
+            const char *username_param;
+            const char *password_param;
+            const char *http_server_type_param;
+            const char *src_path_param;
+            const char *dest_path_param;
+            uint64_t file_size_param;
+
+            json_object *jobj = json_tokener_parse(req.body.c_str());
+            if (jobj != nullptr)
+            {
+                type_param = json_object_get_int(json_object_object_get(jobj, "type"));
+                url_param = json_object_get_string(json_object_object_get(jobj, "url"));
+                username_param  = json_object_get_string(json_object_object_get(jobj, "username"));
+                password_param = json_object_get_string(json_object_object_get(jobj, "password"));
+                http_server_type_param = json_object_get_string(json_object_object_get(jobj, "http_server_type"));
+                src_path_param = json_object_get_string(json_object_object_get(jobj, "src_path"));
+                dest_path_param = json_object_get_string(json_object_object_get(jobj, "dest_path"));
+                file_size_param = json_object_get_uint64(json_object_object_get(jobj, "size"));
+
+                if (url_param == nullptr || src_path_param == nullptr || dest_path_param == nullptr)
+                {
+                    bad_request(res, "Required parameters are missing");
+                    return;
+                }
+
+                BgDownloadData download_data;
+                download_data.host_info.url = url_param;
+                download_data.host_info.type = type_param;
+                download_data.src_path = src_path_param;
+                download_data.dest_path = dest_path_param;
+                download_data.file_size = file_size_param;
+                download_data.state = STATE_PENDING;
+
+                if (username_param != nullptr)
+                    download_data.host_info.username = username_param;
+                if (password_param != nullptr)
+                    download_data.host_info.password = password_param;
+                if (http_server_type_param != nullptr)
+                    download_data.host_info.http_server_type = http_server_type_param;
+
+                bg_download_list.push_back(download_data);
+            }
+        });
+
+        svr->Get("/get_download_state", [&](const Request &req, Response &res)
+        {
+            json_object *download_list = json_object_new_array();
+
+            for (auto it = bg_download_list.begin(); it != bg_download_list.end(); ++it)
+            {
+                json_object *download_item_obj = json_object_new_object();
+                json_object_object_add(download_item_obj, "path", json_object_new_string(it->dest_path.c_str()));
+                json_object_object_add(download_item_obj, "bytes_transfered", json_object_new_uint64(it->bytes_transfered));
+                json_object_object_add(download_item_obj, "file_size", json_object_new_uint64(it->file_size));
+                json_object_object_add(download_item_obj, "state", json_object_new_int(it->state));
+                json_object_array_add(download_list, download_item_obj);
+            }
+            
+            const char *payload_str = json_object_to_json_string(download_list);
+
+            res.status = 200;
+            res.set_content(payload_str, "application/json");
+        });
+ 
         svr->Get("/stop", [&](const Request & /*req*/, Response & /*res*/)
         {
             svr->stop();
@@ -319,5 +426,10 @@ namespace HttpServer
     {
         if (svr != nullptr)
             svr->stop();
+    }
+
+    void StartDownloadThread()
+    {
+        pthread_create(&bg_download_thread, NULL, DownloadFilesThread, NULL);
     }
 }

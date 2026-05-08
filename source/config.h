@@ -26,21 +26,28 @@
 
 #define MAX_PKG_HISTORY_RETENTION 2592000000000L
 
-struct PackageInstallHostData
+struct HostInfo
 {
     int type;
     std::string http_server_type;
     std::string username;
     std::string password;
     std::string url;
+};
+
+struct PackageInstallData
+{
+    HostInfo host_info;
     std::string path;
     uint64_t timestamp;
 };
 
+extern uint64_t *g_bytes_transfered;
+
 namespace CONFIG
 {
-    PackageInstallHostData* GetPackageInstallHostData(const std::string &hash);
-    void AddPackageInstallHostData(const std::string &hash, PackageInstallHostData pkg_data);
+    PackageInstallData* GetPackageInstallHostData(const std::string &hash);
+    void AddPackageInstallHostData(const std::string &hash, PackageInstallData pkg_data);
     void RemovePackageInstallHostData(const std::string &hash);
     void LoadPackageInstallHostData();
     void SavePackageInstallHostData();

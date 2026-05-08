@@ -13,6 +13,7 @@ namespace HttpServer
     void *ServerThread(void *argp);
     void Start();
     void Stop();
+    void StartDownloadThread();
 }
 
 #endif

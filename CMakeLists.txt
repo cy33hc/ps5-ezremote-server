@@ -24,6 +24,7 @@ add_executable(${PROJECT_NAME}.elf
   source/clients/webdav.cpp
   source/config.cpp
   source/crypt.c
+  source/dbglogger.c
   source/fs.cpp
   source/main.cpp
 )
