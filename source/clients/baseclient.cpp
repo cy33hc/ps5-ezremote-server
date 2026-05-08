@@ -53,7 +53,7 @@ int BaseClient::Connect(const std::string &url, const std::string &username, con
 int BaseClient::Get(const std::string &outputfile, const std::string &path, uint64_t offset)
 {
     long status;
-    g_bytes_transfered = 0;
+    *g_bytes_transfered = 0;
 
     CHTTPClient::HeadersMap headers;
     client->SetProgressFnCallback(g_bytes_transfered, DownloadProgressCallback);
