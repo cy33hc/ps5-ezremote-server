@@ -29,6 +29,7 @@ struct BgDownloadData {
     uint64_t bytes_transfered;
     uint64_t file_size;
     DownloadState state;
+    uint64_t id;
 };
 
 Server *svr;
@@ -202,11 +203,18 @@ namespace HttpServer
                     RemoteClient *tmp_client = GetRemoteClient(&(it->host_info));
                     g_bytes_transfered = &(it->bytes_transfered);
                     it->state = STATE_DOWNLOADING;
+                    Util::RichNotify(it->id, "Started download %s", it->dest_path.c_str());
                     int ret = tmp_client->Get(it->dest_path, it->src_path);
                     if (ret == 0)
+                    {
                         it->state = STATE_FAILED;
+                        Util::RichNotify(it->id, "Failed to download %s", it->dest_path.c_str());
+                    }
                     else
+                    {
+                        Util::RichNotify(it->id, "Completed download %s", it->dest_path.c_str());
                         it->state = STATE_SUCCESS;
+                    }
                     DeleteRemoteClient(tmp_client);
                 }
             }
@@ -314,6 +322,7 @@ namespace HttpServer
             const char *src_path_param;
             const char *dest_path_param;
             uint64_t file_size_param;
+            uint64_t id_param;
 
             json_object *jobj = json_tokener_parse(req.body.c_str());
             if (jobj != nullptr)
@@ -326,6 +335,7 @@ namespace HttpServer
                 src_path_param = json_object_get_string(json_object_object_get(jobj, "src_path"));
                 dest_path_param = json_object_get_string(json_object_object_get(jobj, "dest_path"));
                 file_size_param = json_object_get_uint64(json_object_object_get(jobj, "size"));
+                id_param = json_object_get_uint64(json_object_object_get(jobj, "id"));
 
                 if (url_param == nullptr || src_path_param == nullptr || dest_path_param == nullptr)
                 {
@@ -340,6 +350,7 @@ namespace HttpServer
                 download_data.dest_path = dest_path_param;
                 download_data.file_size = file_size_param;
                 download_data.state = STATE_PENDING;
+                download_data.id = id_param;
 
                 if (username_param != nullptr)
                     download_data.host_info.username = username_param;

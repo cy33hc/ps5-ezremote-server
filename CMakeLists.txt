@@ -43,6 +43,7 @@ target_link_libraries(${PROJECT_NAME}.elf
   smb2
   ssh2
   nfs
+  SceNotification
   SceSysCore
   kernel_sys
   SceAppInstUtil

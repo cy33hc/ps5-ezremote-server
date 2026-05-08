@@ -14,6 +14,8 @@
 #define DATA_PATH "/data/homebrew/" APP_ID
 #define PKG_INSTALL_HISTORY_PATH DATA_PATH "/pkg_install_history.json"
 #define DEBUG_SERVER_LOG_PATH DATA_PATH "/ezremote_server.log"
+#define NOTIFY_ICON_FILE "/user" DATA_PATH "/sce_sys/icon0.png"
+#define CLIENT_ELF_PATH DATA_PATH "/ezremote_client.elf"
 
 #define HTTP_SERVER_APACHE "Apache"
 #define HTTP_SERVER_MS_IIS "Microsoft IIS"
