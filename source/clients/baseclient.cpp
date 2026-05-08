@@ -1,6 +1,7 @@
 #include <fstream>
 #include <curl/curl.h>
 #include <sys/time.h>
+#include "sceSystemService.h"
 #include "clients/remote_client.h"
 #include "clients/baseclient.h"
 #include "config.h"
@@ -24,6 +25,7 @@ int BaseClient::DownloadProgressCallback(void* ptr, double dTotalToDownload, dou
     CHTTPClient::ProgressFnStruct *progress_data = (CHTTPClient::ProgressFnStruct*) ptr;
     int64_t *bytes_transfered = (int64_t *) progress_data->pOwner;
 	*bytes_transfered = dNowDownloaded;
+    sceSystemServicePowerTick();
     return 0;
 }
 

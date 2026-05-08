@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <errno.h>
+#include "sceSystemService.h"
 #include "config.h"
 #include "fs.h"
 #include "clients/smbclient.h"
@@ -120,6 +121,7 @@ int SmbClient::Get(const std::string &outputfile, const std::string &ppath, uint
 		}
 		FS::Write(out, buff, count);
 		*g_bytes_transfered += count;
+		sceSystemServicePowerTick();
 	}
 
 	FS::Close(out);

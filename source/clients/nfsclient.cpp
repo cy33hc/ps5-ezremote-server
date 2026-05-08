@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <errno.h>
+#include "sceSystemService.h"
 #include "clients/nfsclient.h"
 #include "config.h"
 #include "fs.h"
@@ -121,6 +122,7 @@ int NfsClient::Get(const std::string &outputfile, const std::string &ppath, uint
 		}
 		FS::Write(out, buff, count);
 		*g_bytes_transfered += count;
+		sceSystemServicePowerTick();
 	}
 
 	FS::Close(out);

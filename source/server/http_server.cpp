@@ -11,6 +11,7 @@
 #include "clients/sftpclient.h"
 #include "clients/webdav.h"
 #include "config.h"
+#include "fs.h"
 #include "util.h"
 
 #define SUCCESS_MSG "{ \"result\": { \"success\": true, \"error\": null } }"
@@ -194,6 +195,8 @@ namespace HttpServer
 
     void *DownloadFilesThread(void *argp)
     {
+        char temp_file[2049];
+
         while (true)
         {
             for (auto it = bg_download_list.begin(); it != bg_download_list.end(); ++it)
@@ -203,8 +206,10 @@ namespace HttpServer
                     RemoteClient *tmp_client = GetRemoteClient(&(it->host_info));
                     g_bytes_transfered = &(it->bytes_transfered);
                     it->state = STATE_DOWNLOADING;
+                    snprintf(temp_file, sizeof(temp_file), "%s.tmp", it->dest_path.c_str());
                     Util::RichNotify(it->id, "Started download %s", it->dest_path.c_str());
-                    int ret = tmp_client->Get(it->dest_path, it->src_path);
+                    int ret = tmp_client->Get(temp_file, it->src_path);
+                    FS::Rename(temp_file, it->dest_path);
                     if (ret == 0)
                     {
                         it->state = STATE_FAILED;
