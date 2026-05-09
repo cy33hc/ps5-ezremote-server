@@ -199,26 +199,26 @@ namespace HttpServer
 
         while (true)
         {
-            for (auto it = bg_download_list.begin(); it != bg_download_list.end(); ++it)
+            for (int i=0; i < bg_download_list.size(); i++)
             {
-                if (it->state == STATE_PENDING)
+                if (bg_download_list[i].state == STATE_PENDING)
                 {
-                    RemoteClient *tmp_client = GetRemoteClient(&(it->host_info));
-                    g_bytes_transfered = &(it->bytes_transfered);
-                    it->state = STATE_DOWNLOADING;
-                    snprintf(temp_file, sizeof(temp_file), "%s.tmp", it->dest_path.c_str());
-                    Util::RichNotify(it->id, "Started download %s", it->dest_path.c_str());
-                    int ret = tmp_client->Get(temp_file, it->src_path);
-                    FS::Rename(temp_file, it->dest_path);
+                    RemoteClient *tmp_client = GetRemoteClient(&(bg_download_list[i].host_info));
+                    g_bytes_transfered = &(bg_download_list[i].bytes_transfered);
+                    bg_download_list[i].state = STATE_DOWNLOADING;
+                    snprintf(temp_file, sizeof(temp_file), "%s.tmp", bg_download_list[i].dest_path.c_str());
+                    Util::RichNotify(bg_download_list[i].id, "Started download %s", bg_download_list[i].dest_path.c_str());
+                    int ret = tmp_client->Get(temp_file, bg_download_list[i].src_path);
+                    FS::Rename(temp_file, bg_download_list[i].dest_path);
                     if (ret == 0)
                     {
-                        it->state = STATE_FAILED;
-                        Util::RichNotify(it->id, "Failed to download %s", it->dest_path.c_str());
+                        bg_download_list[i].state = STATE_FAILED;
+                        Util::RichNotify(bg_download_list[i].id, "Failed to download %s", bg_download_list[i].dest_path.c_str());
                     }
                     else
                     {
-                        Util::RichNotify(it->id, "Completed download %s", it->dest_path.c_str());
-                        it->state = STATE_SUCCESS;
+                        Util::RichNotify(bg_download_list[i].id, "Completed download %s", bg_download_list[i].dest_path.c_str());
+                        bg_download_list[i].state = STATE_SUCCESS;
                     }
                     DeleteRemoteClient(tmp_client);
                 }
@@ -372,13 +372,13 @@ namespace HttpServer
         {
             json_object *download_list = json_object_new_array();
 
-            for (auto it = bg_download_list.begin(); it != bg_download_list.end(); ++it)
+            for (int i=0; i < bg_download_list.size(); i++)
             {
                 json_object *download_item_obj = json_object_new_object();
-                json_object_object_add(download_item_obj, "path", json_object_new_string(it->dest_path.c_str()));
-                json_object_object_add(download_item_obj, "bytes_transfered", json_object_new_uint64(it->bytes_transfered));
-                json_object_object_add(download_item_obj, "file_size", json_object_new_uint64(it->file_size));
-                json_object_object_add(download_item_obj, "state", json_object_new_int(it->state));
+                json_object_object_add(download_item_obj, "path", json_object_new_string(bg_download_list[i].dest_path.c_str()));
+                json_object_object_add(download_item_obj, "bytes_transfered", json_object_new_uint64(bg_download_list[i].bytes_transfered));
+                json_object_object_add(download_item_obj, "file_size", json_object_new_uint64(bg_download_list[i].file_size));
+                json_object_object_add(download_item_obj, "state", json_object_new_int(bg_download_list[i].state));
                 json_object_array_add(download_list, download_item_obj);
             }
             
