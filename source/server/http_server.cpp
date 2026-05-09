@@ -45,6 +45,12 @@ namespace HttpServer
         return 1;
     }
 
+    static int DownloadFtpCallback(int64_t xfered, void *arg)
+    {
+        *g_bytes_transfered = xfered;
+        return 1;
+    }
+
     std::string dump_headers(const Headers &headers)
     {
         std::string s;
@@ -205,10 +211,19 @@ namespace HttpServer
                 {
                     RemoteClient *tmp_client = GetRemoteClient(&(bg_download_list[i].host_info));
                     g_bytes_transfered = &(bg_download_list[i].bytes_transfered);
+                    if (bg_download_list[i].host_info.type == CLIENT_TYPE_FTP)
+                    {
+
+                        FtpClient *ftpclient = (FtpClient*)tmp_client;
+                        ftpclient->SetCallbackXferFunction(DownloadFtpCallback);
+                    }
+
                     bg_download_list[i].state = STATE_DOWNLOADING;
                     snprintf(temp_file, sizeof(temp_file), "%s.tmp", bg_download_list[i].dest_path.c_str());
                     Util::RichNotify(bg_download_list[i].id, "Started download %s", bg_download_list[i].dest_path.c_str());
+
                     int ret = tmp_client->Get(temp_file, bg_download_list[i].src_path);
+
                     FS::Rename(temp_file, bg_download_list[i].dest_path);
                     if (ret == 0)
                     {
@@ -356,6 +371,7 @@ namespace HttpServer
                 download_data.file_size = file_size_param;
                 download_data.state = STATE_PENDING;
                 download_data.id = id_param;
+                download_data.bytes_transfered = 0;
 
                 if (username_param != nullptr)
                     download_data.host_info.username = username_param;
