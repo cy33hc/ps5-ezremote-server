@@ -12,6 +12,12 @@ using httplib::DataSink;
 using httplib::Headers;
 using httplib::Result;
 
+struct download_status
+{
+    uint64_t offset;
+    uint64_t *bytes_transfered;
+};
+
 BaseClient::BaseClient(){};
 
 BaseClient::~BaseClient()
@@ -23,8 +29,8 @@ BaseClient::~BaseClient()
 int BaseClient::DownloadProgressCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded)
 {
     CHTTPClient::ProgressFnStruct *progress_data = (CHTTPClient::ProgressFnStruct*) ptr;
-    int64_t *bytes_transfered = (int64_t *) progress_data->pOwner;
-	*bytes_transfered = dNowDownloaded;
+    download_status *status = (download_status *) progress_data->pOwner;
+    *(status->bytes_transfered) = status->offset + (uint64_t)dNowDownloaded;
     sceSystemServicePowerTick();
     return 0;
 }
@@ -55,20 +61,26 @@ int BaseClient::Connect(const std::string &url, const std::string &username, con
 int BaseClient::Get(const std::string &outputfile, const std::string &path, uint64_t offset)
 {
     long status;
-    *g_bytes_transfered = 0;
+    *g_bytes_transfered = offset;
 
     CHTTPClient::HeadersMap headers;
-    client->SetProgressFnCallback(g_bytes_transfered, DownloadProgressCallback);
+    download_status *dl_status = (download_status*)malloc(sizeof(download_status));
+    dl_status->offset = offset;
+    dl_status->bytes_transfered = g_bytes_transfered;
+
+    client->SetProgressFnCallback(dl_status, DownloadProgressCallback);
     std::string encoded_url = this->host_url + CHTTPClient::EncodeUrl(GetFullPath(path));
-    if (client->DownloadFile(outputfile, encoded_url, status))
+    if (client->DownloadFile(outputfile, encoded_url, status, offset))
     {
+        free(dl_status);
         return 1;
     }
     else
     {
         // sprintf(this->response, "%ld - %s", status, lang_strings[STR_FAIL_DOWNLOAD_MSG]);
     }
-
+    free(dl_status);
+    
     return 0;
 }
 

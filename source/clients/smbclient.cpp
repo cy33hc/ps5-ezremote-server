@@ -98,7 +98,16 @@ int SmbClient::Get(const std::string &outputfile, const std::string &ppath, uint
 		return 0;
 	}
 
-	FILE* out = FS::Create(outputfile);
+	FILE* out = NULL;
+	if (offset > 0)
+	{
+		out = FS::Append(outputfile);
+	}
+	else
+	{
+		out = FS::Create(outputfile);
+	}
+
 	if (out == NULL)
 	{
 		// sprintf(response, "%s", lang_strings[STR_FAILED]);
@@ -107,7 +116,12 @@ int SmbClient::Get(const std::string &outputfile, const std::string &ppath, uint
 
 	uint8_t *buff = (uint8_t*)malloc(max_read_size);
 	int count = 0;
-	*g_bytes_transfered = 0;
+	*g_bytes_transfered = offset;
+
+	if (offset > 0)
+	{
+		smb2_lseek(smb2, in, offset, SEEK_SET, NULL);
+	}
 
 	while ((count = smb2_read(smb2, in, buff, max_read_size)) > 0)
 	{

@@ -194,7 +194,16 @@ int SFTPClient::Get(const std::string &outputfile, const std::string &path, uint
         return 0;
     }
 
-    FILE *out = FS::Create(outputfile);
+	FILE* out = NULL;
+	if (offset > 0)
+	{
+		out = FS::Append(outputfile);
+	}
+	else
+	{
+		out = FS::Create(outputfile);
+	}
+
     if (out == NULL)
     {
         // sprintf(response, "%s", lang_strings[STR_FAILED]);
@@ -203,7 +212,11 @@ int SFTPClient::Get(const std::string &outputfile, const std::string &path, uint
 
     char *buff = (char *)malloc(FTP_CLIENT_BUFSIZ);
     int rc, count = 0;
-    *g_bytes_transfered = 0;
+    *g_bytes_transfered = offset;
+	if (offset > 0)
+	{
+		libssh2_sftp_seek64(sftp_handle, offset);
+	}
 
     do
     {

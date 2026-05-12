@@ -21,22 +21,10 @@
 
 using namespace httplib;
 
-enum DownloadState { STATE_PENDING, STATE_DOWNLOADING, STATE_FAILED, STATE_SUCCESS };
-
-struct BgDownloadData {
-    HostInfo host_info;
-    std::string src_path;
-    std::string dest_path;
-    uint64_t bytes_transfered;
-    uint64_t file_size;
-    DownloadState state;
-    uint64_t id;
-};
-
 Server *svr;
 int http_server_port = 6701;
-static std::vector<BgDownloadData> bg_download_list;
 static pthread_t bg_download_thread;
+static uint64_t g_dl_offset;
 
 namespace HttpServer
 {
@@ -47,7 +35,7 @@ namespace HttpServer
 
     static int DownloadFtpCallback(int64_t xfered, void *arg)
     {
-        *g_bytes_transfered = xfered;
+        *g_bytes_transfered = g_dl_offset + xfered;
         return 1;
     }
 
@@ -202,6 +190,8 @@ namespace HttpServer
     void *DownloadFilesThread(void *argp)
     {
         char temp_file[2049];
+        uint64_t tmp_file_size;
+        int ret;
 
         while (true)
         {
@@ -215,14 +205,18 @@ namespace HttpServer
                     {
 
                         FtpClient *ftpclient = (FtpClient*)tmp_client;
+                        g_dl_offset = 0;
+                        ftpclient->SetCallbackBytes(1);
                         ftpclient->SetCallbackXferFunction(DownloadFtpCallback);
                     }
 
                     bg_download_list[i].state = STATE_DOWNLOADING;
+                    CONFIG::SaveBgDownloadData();
+
                     snprintf(temp_file, sizeof(temp_file), "%s.tmp", bg_download_list[i].dest_path.c_str());
                     Util::RichNotify(bg_download_list[i].id, "Started download %s", bg_download_list[i].dest_path.c_str());
 
-                    int ret = tmp_client->Get(temp_file, bg_download_list[i].src_path);
+                    ret = tmp_client->Get(temp_file, bg_download_list[i].src_path);
 
                     FS::Rename(temp_file, bg_download_list[i].dest_path);
                     if (ret == 0)
@@ -235,6 +229,53 @@ namespace HttpServer
                         Util::RichNotify(bg_download_list[i].id, "Completed download %s", bg_download_list[i].dest_path.c_str());
                         bg_download_list[i].state = STATE_SUCCESS;
                     }
+                    CONFIG::SaveBgDownloadData();
+
+                    DeleteRemoteClient(tmp_client);
+                }
+                else if (bg_download_list[i].state == STATE_DOWNLOADING)
+                {
+                    // Resume interrupted download
+                    RemoteClient *tmp_client = GetRemoteClient(&(bg_download_list[i].host_info));
+                    g_bytes_transfered = &(bg_download_list[i].bytes_transfered);
+                    if (bg_download_list[i].host_info.type == CLIENT_TYPE_FTP)
+                    {
+
+                        FtpClient *ftpclient = (FtpClient*)tmp_client;
+                        ftpclient->SetCallbackBytes(1);
+                        ftpclient->SetCallbackXferFunction(DownloadFtpCallback);
+                    }
+
+                    bg_download_list[i].state = STATE_RESUMED;
+
+                    snprintf(temp_file, sizeof(temp_file), "%s.tmp", bg_download_list[i].dest_path.c_str());
+                    // Check if temp file still exists, if exists then resume download
+                    Util::RichNotify(bg_download_list[i].id, "Resuming download %s", bg_download_list[i].dest_path.c_str());
+                    if (FS::FileExists(temp_file))
+                    {
+                        tmp_file_size = FS::GetSize(temp_file);
+                        g_dl_offset = tmp_file_size;
+                        ret = tmp_client->Get(temp_file, bg_download_list[i].src_path, tmp_file_size);
+                    }
+                    else
+                    {
+                        g_dl_offset = 0;
+                        ret = tmp_client->Get(temp_file, bg_download_list[i].src_path);
+                    }
+
+                    FS::Rename(temp_file, bg_download_list[i].dest_path);
+                    if (ret == 0)
+                    {
+                        bg_download_list[i].state = STATE_FAILED;
+                        Util::RichNotify(bg_download_list[i].id, "Failed to download %s", bg_download_list[i].dest_path.c_str());
+                    }
+                    else
+                    {
+                        Util::RichNotify(bg_download_list[i].id, "Completed download %s", bg_download_list[i].dest_path.c_str());
+                        bg_download_list[i].state = STATE_SUCCESS;
+                    }
+                    CONFIG::SaveBgDownloadData();
+
                     DeleteRemoteClient(tmp_client);
                 }
             }
@@ -364,14 +405,15 @@ namespace HttpServer
                 }
 
                 BgDownloadData download_data;
-                download_data.host_info.url = url_param;
                 download_data.host_info.type = type_param;
+                download_data.host_info.url = url_param;
                 download_data.src_path = src_path_param;
                 download_data.dest_path = dest_path_param;
                 download_data.file_size = file_size_param;
                 download_data.state = STATE_PENDING;
                 download_data.id = id_param;
                 download_data.bytes_transfered = 0;
+                download_data.timestamp = Util::GetTick();
 
                 if (username_param != nullptr)
                     download_data.host_info.username = username_param;
@@ -380,7 +422,8 @@ namespace HttpServer
                 if (http_server_type_param != nullptr)
                     download_data.host_info.http_server_type = http_server_type_param;
 
-                bg_download_list.push_back(download_data);
+                CONFIG::AddBgDownloadData(download_data);
+                CONFIG::SaveBgDownloadData();
             }
         });
 
@@ -395,6 +438,7 @@ namespace HttpServer
                 json_object_object_add(download_item_obj, "bytes_transfered", json_object_new_uint64(bg_download_list[i].bytes_transfered));
                 json_object_object_add(download_item_obj, "file_size", json_object_new_uint64(bg_download_list[i].file_size));
                 json_object_object_add(download_item_obj, "state", json_object_new_int(bg_download_list[i].state));
+                json_object_object_add(download_item_obj, "timestamp", json_object_new_uint64(bg_download_list[i].timestamp/1000000));
                 json_object_array_add(download_list, download_item_obj);
             }
             

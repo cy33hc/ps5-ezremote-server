@@ -19,6 +19,7 @@ int main(int argc, char *argv[])
 	//dbglogger_log("If you see this you've set up dbglogger correctly.");
 
     CONFIG::LoadPackageInstallHostData();
+    CONFIG::LoadBgDownloadData();
     HttpServer::StartDownloadThread();
     HttpServer::Start();
     Util::Notify("ezRemote Server stopped.");

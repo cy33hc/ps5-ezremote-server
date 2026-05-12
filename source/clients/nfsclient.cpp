@@ -99,7 +99,17 @@ int NfsClient::Get(const std::string &outputfile, const std::string &ppath, uint
 		return 0;
 	}
 
-	FILE* out = FS::Create(outputfile);
+	FILE* out = NULL;
+	if (offset > 0)
+	{
+		out = FS::Append(outputfile);
+	}
+	else
+	{
+		out = FS::Create(outputfile);
+	}
+
+
 	if (out == NULL)
 	{
 		// sprintf(response, "%s", lang_strings[STR_FAILED]);
@@ -108,7 +118,11 @@ int NfsClient::Get(const std::string &outputfile, const std::string &ppath, uint
 
 	void *buff = malloc(BUF_SIZE);
 	int count = 0;
-	*g_bytes_transfered = 0;
+	*g_bytes_transfered = offset;
+	if (offset > 0)
+	{
+		nfs_lseek(nfs, nfsfh, offset, SEEK_SET, NULL);
+	}
 
 	while ((count = nfs_read(nfs, nfsfh, BUF_SIZE, buff)) > 0)
 	{

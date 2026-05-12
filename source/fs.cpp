@@ -115,7 +115,7 @@ namespace FS
 
     FILE *Append(const std::string &path)
     {
-        FILE *fd = fopen(path.c_str(), "a");
+        FILE *fd = fopen(path.c_str(), "ab");
         return fd;
     }
 
