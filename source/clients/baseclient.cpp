@@ -52,6 +52,7 @@ int BaseClient::Connect(const std::string &url, const std::string &username, con
         client->SetBasicAuth(username, password);
     }
     client->InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
+    client->SetBufferSize(524288L);
 
     this->connected = true;
 
