@@ -447,7 +447,7 @@ namespace HttpServer
             res.status = 200;
             res.set_content(payload_str, "application/json");
         });
- 
+
         svr->Get("/stop", [&](const Request & /*req*/, Response & /*res*/)
         {
             svr->stop();
@@ -478,7 +478,7 @@ namespace HttpServer
        
         svr->set_payload_max_length(1024 * 1024 * 12);
         svr->set_tcp_nodelay(true);
-        svr->set_mount_point("/", "/");
+        svr->set_mount_point("/", "/data/homebrew/ezremote-client/assets/");
 
         svr->listen("0.0.0.0", http_server_port);
 
