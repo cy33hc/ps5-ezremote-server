@@ -121,32 +121,22 @@ namespace HttpServer
     static RemoteClient *GetRemoteClient(HostInfo *host_info)
     {
         RemoteClient *tmp_client = nullptr;
-        if (host_info->type == CLIENT_TYPE_HTTP_SERVER)
+
+        if (host_info->client != nullptr)
+        {
+            tmp_client = host_info->client;
+        }
+        else if (host_info->type == CLIENT_TYPE_HTTP_SERVER)
         {
             if (host_info->http_server_type.compare(HTTP_SERVER_ARCHIVEORG))
             {
                 tmp_client = new ArchiveOrgClient();
             }
-            else if (host_info->http_server_type.compare(HTTP_SERVER_APACHE))
+            else
             {
                 tmp_client = new BaseClient();
             }
-            else if (host_info->http_server_type.compare(HTTP_SERVER_MS_IIS))
-            {
-                tmp_client = new BaseClient();
-            }
-            else if (host_info->http_server_type.compare(HTTP_SERVER_NGINX))
-            {
-                tmp_client = new BaseClient();
-            }
-            else if (host_info->http_server_type.compare(HTTP_SERVER_RCLONE))
-            {
-                tmp_client = new BaseClient();
-            }
-            else if (host_info->http_server_type.compare(HTTP_SERVER_NPX_SERVE))
-            {
-                tmp_client = new BaseClient();
-            }
+            host_info->client = tmp_client;
         }
         else if (host_info->type == CLIENT_TYPE_SMB)
         {
@@ -155,10 +145,12 @@ namespace HttpServer
         else if (host_info->type == CLIENT_TYPE_FILEHOST)
         {
             tmp_client = new BaseClient();
+            host_info->client = tmp_client;
         }
         else if (host_info->type == CLIENT_TYPE_WEBDAV)
         {
             tmp_client = new WebDAVClient();
+            host_info->client = tmp_client;
         }
         else if (host_info->type == CLIENT_TYPE_SFTP)
         {
@@ -183,8 +175,11 @@ namespace HttpServer
 
     static void DeleteRemoteClient(RemoteClient *tmp_client)
     {
-        tmp_client->Quit();
-        delete tmp_client;
+        if (dynamic_cast<BaseClient*>(tmp_client) == nullptr)
+        {
+            tmp_client->Quit();
+            delete tmp_client;
+        }
     }
 
     void *DownloadFilesThread(void *argp)
@@ -330,6 +325,7 @@ namespace HttpServer
                     pkg_data.host_info.http_server_type = http_server_type_param;
                 pkg_data.timestamp = Util::GetTick();
                 pkg_data.host_info.type = type_param;
+                pkg_data.host_info.client = nullptr;
 
                 CONFIG::AddPackageInstallHostData(hash_param, pkg_data);
                 CONFIG::SavePackageInstallHostData();

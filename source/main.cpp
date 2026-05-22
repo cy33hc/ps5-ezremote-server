@@ -11,7 +11,7 @@
 #include "server/http_server.h"
 #include "config.h"
 #include "util.h"
-#include "dbglogger.h"
+//#include "dbglogger.h"
 
 int main(int argc, char *argv[])
 {

@@ -38,6 +38,7 @@ struct HostInfo
     std::string http_server_type;
     std::string username;
     std::string password;
+    RemoteClient *client;
 };
 
 struct PackageInstallData
