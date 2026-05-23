@@ -403,6 +403,7 @@ namespace HttpServer
                 BgDownloadData download_data;
                 download_data.host_info.type = type_param;
                 download_data.host_info.url = url_param;
+                download_data.host_info.client = nullptr;
                 download_data.src_path = src_path_param;
                 download_data.dest_path = dest_path_param;
                 download_data.file_size = file_size_param;
