@@ -35,6 +35,15 @@ int BaseClient::DownloadProgressCallback(void* ptr, double dTotalToDownload, dou
     return 0;
 }
 
+size_t BaseClient::WriteCallback(void *pCurlData, size_t usBlockCount, size_t usBlockSize, void *pUserData)
+{
+    const char* buff = reinterpret_cast<char *>(pCurlData);
+    DataSink *out = reinterpret_cast<DataSink*>(pUserData);
+    if (out->write(buff, usBlockCount*usBlockSize))
+        return (usBlockCount * usBlockSize);
+    return 0;
+}
+
 int BaseClient::Connect(const std::string &url, const std::string &username, const std::string &password)
 {
     this->host_url = url;
@@ -85,8 +94,6 @@ int BaseClient::Get(const std::string &outputfile, const std::string &path, uint
     return 0;
 }
 
-
-
 int BaseClient::GetRange(const std::string &path, DataSink &sink, uint64_t size, uint64_t offset)
 {
     CHTTPClient::HttpResponse res;
@@ -97,12 +104,12 @@ int BaseClient::GetRange(const std::string &path, DataSink &sink, uint64_t size,
     headers["Range"] = range_header;
 
     std::string encoded_url = this->host_url + CHTTPClient::EncodeUrl(GetFullPath(path));
-    if (client->Get(encoded_url, headers, res))
+    if (client->Get(encoded_url, headers, res, (void*)&WriteCallback, (void*)&sink))
     {
-        uint64_t len = MIN(size, res.strBody.size());
-        if (!sink.write(res.strBody.data(), len))
+        if (HTTP_SUCCESS(res.iCode))
+            return 1;
+        else
             return 0;
-        return 1;
     }
     else
     {

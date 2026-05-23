@@ -22,6 +22,7 @@ public:
     const char *LastResponse();
     int Quit();
     static int DownloadProgressCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded);
+    static size_t WriteCallback(void *pCurlData, size_t usBlockCount, size_t usBlockSize, void *pUserData);
 
 protected:
     CHTTPClient *client;
