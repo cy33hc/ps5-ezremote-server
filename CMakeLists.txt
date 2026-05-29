@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 3.5)
 
 project(ezremote-server)
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-keyword-macro -fPIC -fPIE -march=znver2 -Wall -fstack-protector-all")
-set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -DDEBUG -gfull -gdwarf-2 -O0 -pedantic -pedantic-errors")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 ")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -Wno-keyword-macro -fPIC -fPIE -march=znver2 -Wall -fstack-protector-all")
+set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -gdwarf-2 -O0 -pedantic -pedantic-errors")
+
 set(APP_VERSION "1.03")
 
 include_directories(
