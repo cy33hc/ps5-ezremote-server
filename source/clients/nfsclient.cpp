@@ -124,7 +124,7 @@ int NfsClient::Get(const std::string &outputfile, const std::string &ppath, uint
 		nfs_lseek(nfs, nfsfh, offset, SEEK_SET, NULL);
 	}
 
-	while ((count = nfs_read(nfs, nfsfh, BUF_SIZE, buff)) > 0)
+	while ((count = nfs_read(nfs, nfsfh, BUF_SIZE, buff)) != 0)
 	{
 		if (count < 0)
 		{

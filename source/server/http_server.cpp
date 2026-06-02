@@ -203,7 +203,6 @@ namespace HttpServer
 
                     ret = tmp_client->Get(temp_file, bg_download_list[i].src_path);
 
-                    FS::Rename(temp_file, bg_download_list[i].dest_path);
                     if (ret == 0)
                     {
                         bg_download_list[i].state = STATE_FAILED;
@@ -211,6 +210,7 @@ namespace HttpServer
                     }
                     else
                     {
+                        FS::Rename(temp_file, bg_download_list[i].dest_path);
                         Util::RichNotify(bg_download_list[i].id, "Completed download %s", bg_download_list[i].dest_path.c_str());
                         bg_download_list[i].state = STATE_SUCCESS;
                     }
@@ -218,7 +218,7 @@ namespace HttpServer
 
                     DeleteRemoteClient(tmp_client);
                 }
-                else if (bg_download_list[i].state == STATE_DOWNLOADING)
+                else if (bg_download_list[i].state == STATE_DOWNLOADING || bg_download_list[i].state == STATE_FAILED)
                 {
                     // Resume interrupted download
                     RemoteClient *tmp_client = GetRemoteClient(&(bg_download_list[i].host_info));
@@ -248,7 +248,6 @@ namespace HttpServer
                         ret = tmp_client->Get(temp_file, bg_download_list[i].src_path);
                     }
 
-                    FS::Rename(temp_file, bg_download_list[i].dest_path);
                     if (ret == 0)
                     {
                         bg_download_list[i].state = STATE_FAILED;
@@ -256,6 +255,7 @@ namespace HttpServer
                     }
                     else
                     {
+                        FS::Rename(temp_file, bg_download_list[i].dest_path);
                         Util::RichNotify(bg_download_list[i].id, "Completed download %s", bg_download_list[i].dest_path.c_str());
                         bg_download_list[i].state = STATE_SUCCESS;
                     }
@@ -494,5 +494,10 @@ namespace HttpServer
     void StartDownloadThread()
     {
         pthread_create(&bg_download_thread, NULL, DownloadFilesThread, NULL);
+    }
+
+    void StopDownloadThread()
+    {
+        pthread_cancel(bg_download_thread);
     }
 }

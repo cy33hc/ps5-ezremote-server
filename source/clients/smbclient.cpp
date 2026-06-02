@@ -123,7 +123,7 @@ int SmbClient::Get(const std::string &outputfile, const std::string &ppath, uint
 		smb2_lseek(smb2, in, offset, SEEK_SET, NULL);
 	}
 
-	while ((count = smb2_read(smb2, in, buff, max_read_size)) > 0)
+	while ((count = smb2_read(smb2, in, buff, max_read_size)) != 0)
 	{
 		if (count < 0)
 		{

@@ -211,27 +211,25 @@ int SFTPClient::Get(const std::string &outputfile, const std::string &path, uint
     }
 
     char *buff = (char *)malloc(FTP_CLIENT_BUFSIZ);
-    int rc, count = 0;
+    int count = 0;
     *g_bytes_transfered = offset;
 	if (offset > 0)
 	{
 		libssh2_sftp_seek64(sftp_handle, offset);
 	}
 
-    do
-    {
-        rc = libssh2_sftp_read(sftp_handle, buff, FTP_CLIENT_BUFSIZ);
-        if (rc > 0)
-        {
-            *g_bytes_transfered  += rc;
-            FS::Write(out, buff, rc);
-            sceSystemServicePowerTick();
-        }
-        else
-        {
-            break;
-        }
-    } while (1);
+	while ((count = libssh2_sftp_read(sftp_handle, buff, FTP_CLIENT_BUFSIZ))!= 0)
+	{
+		if (count < 0)
+		{
+            free((char *)buff);
+            FS::Close(out);
+            libssh2_sftp_close(sftp_handle);
+            return 0;
+		}
+		FS::Write(out, buff, count);
+		*g_bytes_transfered += count;
+	}
 
     free((char *)buff);
     FS::Close(out);

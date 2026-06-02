@@ -22,6 +22,7 @@ int main(int argc, char *argv[])
     CONFIG::LoadBgDownloadData();
     HttpServer::StartDownloadThread();
     HttpServer::Start();
+    HttpServer::StopDownloadThread();
     Util::Notify("ezRemote Server stopped.");
 
     return 0;
