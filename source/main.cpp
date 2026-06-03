@@ -15,11 +15,18 @@
 
 int main(int argc, char *argv[])
 {
-	//dbglogger_init();
-	//dbglogger_log("If you see this you've set up dbglogger correctly.");
+    //dbglogger_init();
+    //dbglogger_log("If you see this you've set up dbglogger correctly.");
 
     CONFIG::LoadPackageInstallHostData();
     CONFIG::LoadBgDownloadData();
+
+    if (HttpServer::IsStarted())
+    {
+        Util::Notify("ezRemote Server already started");
+        return 0;
+    }
+
     HttpServer::StartDownloadThread();
     HttpServer::Start();
     HttpServer::StopDownloadThread();
