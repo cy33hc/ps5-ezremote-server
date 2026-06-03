@@ -25,6 +25,7 @@ Server *svr;
 int http_server_port = 6701;
 static pthread_t bg_download_thread;
 static uint64_t g_dl_offset;
+static bool stop_download = false;
 
 namespace HttpServer
 {
@@ -122,28 +123,33 @@ namespace HttpServer
     {
         RemoteClient *tmp_client = nullptr;
 
-        if (host_info->type == CLIENT_TYPE_HTTP_SERVER)
+        if (host_info->client != nullptr)
         {
-            if (host_info->http_server_type.compare(HTTP_SERVER_ARCHIVEORG))
+            return host_info->client;
+        }
+        else if (host_info->type == CLIENT_TYPE_HTTP_SERVER)
+        {
+            if (host_info->http_server_type.compare(HTTP_SERVER_ARCHIVEORG) == 0)
             {
                 tmp_client = new ArchiveOrgClient();
+                host_info->client = tmp_client;
             }
             else
             {
                 tmp_client = new BaseClient();
             }
         }
-        else if (host_info->type == CLIENT_TYPE_SMB)
+        else if (host_info->type == CLIENT_TYPE_WEBDAV)
         {
-            tmp_client = new SmbClient();
+            tmp_client = new WebDAVClient();
         }
         else if (host_info->type == CLIENT_TYPE_FILEHOST)
         {
             tmp_client = new BaseClient();
         }
-        else if (host_info->type == CLIENT_TYPE_WEBDAV)
+        else if (host_info->type == CLIENT_TYPE_SMB)
         {
-            tmp_client = new WebDAVClient();
+            tmp_client = new SmbClient();
         }
         else if (host_info->type == CLIENT_TYPE_SFTP)
         {
@@ -168,8 +174,11 @@ namespace HttpServer
 
     static void DeleteRemoteClient(RemoteClient *tmp_client)
     {
-        tmp_client->Quit();
-        delete tmp_client;
+        if (!dynamic_cast<ArchiveOrgClient*>(tmp_client))
+        {
+            tmp_client->Quit();
+            delete tmp_client;
+        }
     }
 
     void *DownloadFilesThread(void *argp)
@@ -178,13 +187,18 @@ namespace HttpServer
         uint64_t tmp_file_size;
         int ret;
 
-        while (true)
+        while (!stop_download)
         {
             for (int i=0; i < bg_download_list.size(); i++)
             {
                 if (bg_download_list[i].state == STATE_PENDING)
                 {
                     RemoteClient *tmp_client = GetRemoteClient(&(bg_download_list[i].host_info));
+                    if (tmp_client == nullptr)
+                    {
+                        continue;;
+                    }
+
                     g_bytes_transfered = &(bg_download_list[i].bytes_transfered);
                     if (bg_download_list[i].host_info.type == CLIENT_TYPE_FTP)
                     {
@@ -222,6 +236,11 @@ namespace HttpServer
                 {
                     // Resume interrupted download
                     RemoteClient *tmp_client = GetRemoteClient(&(bg_download_list[i].host_info));
+                    if (tmp_client == nullptr)
+                    {
+                        continue;
+                    }
+
                     g_bytes_transfered = &(bg_download_list[i].bytes_transfered);
                     if (bg_download_list[i].host_info.type == CLIENT_TYPE_FTP)
                     {
@@ -274,7 +293,9 @@ namespace HttpServer
     void *ServerThread(void *argp)
     {
         svr->Get("/", [&](const Request &req, Response &res)
-                 { res.set_redirect("/index.html"); });
+        {
+            res.set_redirect("/index.html");
+        });
 
         svr->Post("/store_bg_install_data", [&](const Request &req, Response &res)
         {
@@ -326,6 +347,7 @@ namespace HttpServer
         {
             std::string hash = req.matches[1];
             PackageInstallData* pkg_host_data = CONFIG::GetPackageInstallHostData(hash);
+            RemoteClient *tmp_client;
 
             if (pkg_host_data == nullptr)
             {
@@ -333,7 +355,7 @@ namespace HttpServer
                 return;
             }
 
-            RemoteClient *tmp_client = GetRemoteClient(&(pkg_host_data->host_info));
+            tmp_client = GetRemoteClient(&(pkg_host_data->host_info));
             if (tmp_client == nullptr)
             {
                 res.status = 500;
@@ -498,6 +520,17 @@ namespace HttpServer
 
     void StopDownloadThread()
     {
+        stop_download = true;
         pthread_cancel(bg_download_thread);
+    }
+
+    bool IsStarted()
+    {
+        httplib::Client client = httplib::Client("http://127.0.0.1:6701");
+        if (auto res = client.Get("/version"))
+        {
+            return true;
+        }
+        return false;
     }
 }

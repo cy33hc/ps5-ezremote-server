@@ -181,6 +181,7 @@ namespace CONFIG
                 history_item.host_info.url = std::string(json_object_get_string(json_object_object_get(history_item_obj, "url")));
                 history_item.host_info.username = std::string(json_object_get_string(json_object_object_get(history_item_obj, "username")));
                 std::string encrypted_password = std::string(json_object_get_string(json_object_object_get(history_item_obj, "password")));
+                history_item.host_info.client = nullptr;
 
                 if (history_item.host_info.type == CLIENT_TYPE_HTTP_SERVER)
 		        {
