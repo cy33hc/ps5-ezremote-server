@@ -14,6 +14,7 @@ public:
 private:
     int Login(const std::string &username, const std::string &password);
     std::string GenerateRandomId(const int len);
+    std::mutex mtx;
 };
 
 #endif

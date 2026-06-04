@@ -137,6 +137,7 @@ bool is_valid_path(const std::string &path) {
     // Read component
     auto beg = i;
     while (i < path.size() && path[i] != '/') {
+      if (path[i] == '\0') { return false; }
       i++;
     }
 
@@ -294,7 +295,7 @@ std::string trim_double_quotes_copy(const std::string &s) {
 
 void split(const char *b, const char *e, char d,
                   std::function<void(const char *, const char *)> fn) {
-  return split(b, e, d, std::numeric_limits<size_t>::max(), fn);
+  return split(b, e, d, (std::numeric_limits<size_t>::max)(), fn);
 }
 
 void split(const char *b, const char *e, char d, size_t m,
@@ -442,7 +443,9 @@ bool mmap::is_open() const { return addr_ != nullptr; }
 
 size_t mmap::size() const { return size_; }
 
-const char *mmap::data() const { return (const char *)addr_; }
+const char *mmap::data() const {
+  return static_cast<const char *>(addr_);
+}
 
 void mmap::close() {
 #if defined(_WIN32)
@@ -527,7 +530,7 @@ ssize_t select_read(socket_t sock, time_t sec, time_t usec) {
   return handle_EINTR([&]() { return poll(&pfd_read, 1, timeout); });
 #else
 #ifndef _WIN32
-  if (sock >= FD_SETSIZE) { return 1; }
+  if (sock >= FD_SETSIZE) { return -1; }
 #endif
 
   fd_set fds;
@@ -555,7 +558,7 @@ ssize_t select_write(socket_t sock, time_t sec, time_t usec) {
   return handle_EINTR([&]() { return poll(&pfd_read, 1, timeout); });
 #else
 #ifndef _WIN32
-  if (sock >= FD_SETSIZE) { return 1; }
+  if (sock >= FD_SETSIZE) { return -1; }
 #endif
 
   fd_set fds;
@@ -1662,8 +1665,8 @@ bool read_content_chunked(Stream &strm, T &x,
 }
 
 bool is_chunked_transfer_encoding(const Headers &headers) {
-  return !strcasecmp(get_header_value(headers, "Transfer-Encoding", 0, ""),
-                     "chunked");
+  return compare_case_ignore(
+      get_header_value(headers, "Transfer-Encoding", 0, ""), "chunked");
 }
 
 template <typename T, typename U>
@@ -2358,26 +2361,30 @@ std::string to_lower(const char *beg, const char *end) {
   return out;
 }
 
-std::string make_multipart_data_boundary() {
+std::string random_string(size_t length) {
   static const char data[] =
       "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
   // std::random_device might actually be deterministic on some
   // platforms, but due to lack of support in the c++ standard library,
   // doing better requires either some ugly hacks or breaking portability.
-  std::random_device seed_gen;
+  static std::random_device seed_gen;
 
   // Request 128 bits of entropy for initialization
-  std::seed_seq seed_sequence{seed_gen(), seed_gen(), seed_gen(), seed_gen()};
-  std::mt19937 engine(seed_sequence);
+  static std::seed_seq seed_sequence{seed_gen(), seed_gen(), seed_gen(),
+                                     seed_gen()};
 
-  std::string result = "--cpp-httplib-multipart-data-";
+  static std::mt19937 engine(seed_sequence);
 
-  for (auto i = 0; i < 16; i++) {
+  std::string result;
+  for (size_t i = 0; i < length; i++) {
     result += data[engine() % (sizeof(data) - 1)];
   }
-
   return result;
+}
+
+std::string make_multipart_data_boundary() {
+  return "--cpp-httplib-multipart-data-" + detail::random_string(16);
 }
 
 bool is_multipart_boundary_chars_valid(const std::string &boundary) {
@@ -2438,32 +2445,41 @@ serialize_multipart_formdata(const MultipartFormDataItems &items,
 }
 
 std::pair<size_t, size_t>
-get_range_offset_and_length(const Request &req, size_t content_length,
-                            size_t index) {
-  auto r = req.ranges[index];
-
-  if (r.first == -1 && r.second == -1) {
+get_range_offset_and_length(Range range, size_t content_length) {
+  if (range.first == -1 && range.second == -1) {
     return std::make_pair(0, content_length);
   }
 
   auto slen = static_cast<ssize_t>(content_length);
 
-  if (r.first == -1) {
-    r.first = (std::max)(static_cast<ssize_t>(0), slen - r.second);
-    r.second = slen - 1;
+  if (range.first == -1) {
+    range.first = (std::max)(static_cast<ssize_t>(0), slen - range.second);
+    range.second = slen - 1;
   }
 
-  if (r.second == -1) { r.second = slen - 1; }
-  return std::make_pair(r.first, static_cast<size_t>(r.second - r.first) + 1);
+  if (range.second == -1) { range.second = slen - 1; }
+  return std::make_pair(range.first,
+                        static_cast<size_t>(range.second - range.first) + 1);
+}
+
+std::pair<size_t, size_t>
+get_range_offset_and_length(const Request &req, size_t content_length,
+                            size_t index) {
+  return get_range_offset_and_length(req.ranges[index], content_length);
 }
 
 std::string
 make_content_range_header_field(const std::pair<ssize_t, ssize_t> &range,
                                 size_t content_length) {
+
+  auto ret = get_range_offset_and_length(range, content_length);
+  auto st = ret.first;
+  auto ed = (std::min)(st + ret.second - 1, content_length - 1);
+
   std::string field = "bytes ";
-  if (range.first != -1) { field += std::to_string(range.first); }
+  field += std::to_string(st);
   field += "-";
-  if (range.second != -1) { field += std::to_string(range.second); }
+  field += std::to_string(ed);
   field += "/";
   field += std::to_string(content_length);
   return field;
@@ -2491,9 +2507,9 @@ bool process_multipart_ranges_data(const Request &req, Response &res,
     ctoken("\r\n");
     ctoken("\r\n");
 
-    auto offsets = get_range_offset_and_length(req, res.content_length_, i);
-    auto offset = offsets.first;
-    auto length = offsets.second;
+    auto ret = get_range_offset_and_length(req, res.content_length_, i);
+    auto offset = ret.first;
+    auto length = ret.second;
     if (!content(offset, length)) { return false; }
     ctoken("\r\n");
   }
@@ -2554,18 +2570,6 @@ bool write_multipart_ranges_data(Stream &strm, const Request &req,
         return write_content(strm, res.content_provider_, offset, length,
                              is_shutting_down);
       });
-}
-
-std::pair<size_t, size_t>
-get_range_offset_and_length(const Request &req, const Response &res,
-                            size_t index) {
-  auto r = req.ranges[index];
-
-  if (r.second == -1) {
-    r.second = static_cast<ssize_t>(res.content_length_) - 1;
-  }
-
-  return std::make_pair(r.first, r.second - r.first + 1);
 }
 
 bool expect_content(const Request &req) {
@@ -2854,20 +2858,6 @@ bool parse_www_authenticate(const Response &res,
   return false;
 }
 
-// https://stackoverflow.com/questions/440133/how-do-i-create-a-random-alpha-numeric-string-in-c/440240#answer-440240
-std::string random_string(size_t length) {
-  auto randchar = []() -> char {
-    const char charset[] = "0123456789"
-                           "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                           "abcdefghijklmnopqrstuvwxyz";
-    const size_t max_index = (sizeof(charset) - 1);
-    return charset[static_cast<size_t>(std::rand()) % max_index];
-  };
-  std::string str(length, 0);
-  std::generate_n(str.begin(), length, randchar);
-  return str;
-}
-
 class ContentProviderAdapter {
 public:
   explicit ContentProviderAdapter(
@@ -3071,6 +3061,15 @@ void Response::set_content(const char *s, size_t n,
 void Response::set_content(const std::string &s,
                                   const std::string &content_type) {
   set_content(s.data(), s.size(), content_type);
+}
+
+void Response::set_content(std::string &&s,
+                                  const std::string &content_type) {
+  body = std::move(s);
+
+  auto rng = headers.equal_range("Content-Type");
+  headers.erase(rng.first, rng.second);
+  set_header("Content-Type", content_type);
 }
 
 void Response::set_content_provider(
@@ -3768,10 +3767,10 @@ Server::write_content_with_provider(Stream &strm, const Request &req,
       return detail::write_content(strm, res.content_provider_, 0,
                                    res.content_length_, is_shutting_down);
     } else if (req.ranges.size() == 1) {
-      auto offsets =
+      auto ret =
           detail::get_range_offset_and_length(req, res.content_length_, 0);
-      auto offset = offsets.first;
-      auto length = offsets.second;
+      auto offset = ret.first;
+      auto length = ret.second;
       return detail::write_content(strm, res.content_provider_, offset, length,
                                    is_shutting_down);
     } else {
@@ -4060,7 +4059,11 @@ bool Server::listen_internal() {
 #endif
       }
 
-      task_queue->enqueue([this, sock]() { process_and_close_socket(sock); });
+      if (!task_queue->enqueue(
+              [this, sock]() { process_and_close_socket(sock); })) {
+        detail::shutdown_socket(sock);
+        detail::close_socket(sock);
+      }
     }
 
     task_queue->shutdown();
@@ -4184,9 +4187,9 @@ void Server::apply_ranges(const Request &req, Response &res,
       if (req.ranges.empty()) {
         length = res.content_length_;
       } else if (req.ranges.size() == 1) {
-        auto offsets =
+        auto ret =
             detail::get_range_offset_and_length(req, res.content_length_, 0);
-        length = offsets.second;
+        length = ret.second;
 
         auto content_range = detail::make_content_range_header_field(
             req.ranges[0], res.content_length_);
@@ -4216,10 +4219,9 @@ void Server::apply_ranges(const Request &req, Response &res,
           req.ranges[0], res.body.size());
       res.set_header("Content-Range", content_range);
 
-      auto offsets =
-          detail::get_range_offset_and_length(req, res.body.size(), 0);
-      auto offset = offsets.first;
-      auto length = offsets.second;
+      auto ret = detail::get_range_offset_and_length(req, res.body.size(), 0);
+      auto offset = ret.first;
+      auto length = ret.second;
 
       if (offset < res.body.size()) {
         res.body = res.body.substr(offset, length);
@@ -6426,11 +6428,11 @@ bool SSLClient::initialize_ssl(Socket &socket, Error &error) {
         return true;
       },
       [&](SSL *ssl2) {
-        // NOTE: With -Wold-style-cast, this can produce a warning, since
-        //  SSL_set_tlsext_host_name is a macro (in OpenSSL), which contains
-        //  an old style cast. Short of doing compiler specific pragma's
-        //  here, we can't get rid of this warning. :'(
-        SSL_set_tlsext_host_name(ssl2, host_.c_str());
+        // NOTE: Direct call instead of using the OpenSSL macro to suppress
+        // -Wold-style-cast warning
+        // SSL_set_tlsext_host_name(ssl2, host_.c_str());
+        SSL_ctrl(ssl2, SSL_CTRL_SET_TLSEXT_HOSTNAME, TLSEXT_NAMETYPE_host_name,
+                 static_cast<void *>(const_cast<char *>(host_.c_str())));
         return true;
       });
 

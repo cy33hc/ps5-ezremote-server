@@ -4,7 +4,6 @@
 #include <string>
 #include <vector>
 #include <map>
-#include "httpclient/HTTPClient.h"
 #include "clients/remote_client.h"
 
 #define HTTP_SUCCESS(x) (x >= 200 && x < 300)
@@ -21,16 +20,16 @@ public:
     std::string GetFullPath(std::string path1);
     const char *LastResponse();
     int Quit();
-    static int DownloadProgressCallback(void* ptr, double dTotalToDownload, double dNowDownloaded, double dTotalToUpload, double dNowUploaded);
-    static int SocketOptCallback(void* ptr, int fd, uint32_t socktype);
-    static size_t WriteCallback(void *pCurlData, size_t usBlockCount, size_t usBlockSize, void *pUserData);
 
 protected:
-    CHTTPClient *client;
+    int SetCookies(httplib::Headers &headers);
+
+    httplib::Client *client;
     std::string base_path;
     std::string host_url;
     char response[512];
     bool connected = false;
+    std::map<std::string, std::string> cookies;
 };
 
 #endif

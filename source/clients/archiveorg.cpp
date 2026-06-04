@@ -8,6 +8,20 @@
 #include "clients/archiveorg.h"
 #include "util.h"
 
+using httplib::Client;
+using httplib::Headers;
+using httplib::Result;
+
+struct InsensitiveCompare
+{
+    bool operator()(const std::string &a, const std::string &b) const
+    {
+        return strcasecmp(a.c_str(), b.c_str()) < 0;
+    }
+};
+
+static std::set<std::string, InsensitiveCompare> ignore_cookie_keys = {"path", "expires", "max-age", "domain", "secure"};
+
 std::string ArchiveOrgClient::GenerateRandomId(const int len)
 {
     static const char alphanum[] = "0123456789abcdef";
@@ -23,6 +37,10 @@ std::string ArchiveOrgClient::GenerateRandomId(const int len)
 
 int ArchiveOrgClient::Connect(const std::string &url, const std::string &username, const std::string &password)
 {
+    std::lock_guard<std::mutex> lock(mtx);
+    if (this->connected)
+        return 1;
+
     this->host_url = url;
     size_t scheme_pos = url.find("://");
     size_t root_pos = url.find("/", scheme_pos + 3);
@@ -31,47 +49,87 @@ int ArchiveOrgClient::Connect(const std::string &url, const std::string &usernam
         this->host_url = url.substr(0, root_pos);
         this->base_path = url.substr(root_pos);
     }
-    client = new CHTTPClient([](const std::string& log){});
-    client->InitSession(true, CHTTPClient::SettingsFlag::NO_FLAGS);
-    client->SetBufferSize(524288L);
-    
-    client->SetCookie("donation-identifier", GenerateRandomId(32));
-    client->SetCookie("test-cookie", "1");
-    client->SetCookie("abtest-identifier", GenerateRandomId(32));
+
+    client = new httplib::Client(this->host_url);
+    client->set_keep_alive(true);
+    client->set_follow_location(true);
+    client->set_connection_timeout(30);
+    client->set_read_timeout(30);
+    client->enable_server_certificate_verification(false);
+
+    this->cookies = {
+        {"donation-identifier", GenerateRandomId(32)},
+        {"test-cookie", "1"},
+        {"abtest-identifier", GenerateRandomId(32)}
+    };
 
     if (username.length() > 0)
         return Login(username, password);
+
     this->connected = true;
     return 1;
 }
 
 int ArchiveOrgClient::Login(const std::string &username, const std::string &password)
 {
-    CHTTPClient::HeadersMap headers;
-    CHTTPClient::HttpResponse res;
+    std::string url = std::string("/account/login");
+    Headers headers = {{ "User-Agent", "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0"}};
+    SetCookies(headers);
 
-    std::string encoded_path = this->host_url + CHTTPClient::EncodeUrl("/account/login");
-    CHTTPClient::PostFormInfo formdata;
-    formdata.AddFormContent("username", username);
-    formdata.AddFormContent("password", password);
-    formdata.AddFormContent("remember", "true");
-    formdata.AddFormContent("referer", "https://archive.org/");
-    formdata.AddFormContent("login", "true");
-    formdata.AddFormContent("submit_by_js", "true");
+    MultipartFormDataItems items = {
+        {"username", username, "", ""},
+        {"password", password, "", ""},
+        {"remember", "true", "", ""},
+        {"referer", "https://archive.org/", "", ""},
+        {"login", "true", "", ""},
+        {"submit_by_js", "true", "", ""}};
 
-    if (client->UploadForm(encoded_path, headers, formdata, res))
+    if (auto res = client->Post(url, headers, items))
     {
-        if (res.cookies.size() > 0)
+        if (HTTP_SUCCESS(res->status))
         {
-            for (CHTTPClient::HeadersMap::iterator it = res.cookies.begin(); it != res.cookies.end();)
+            if (res->has_header("Set-Cookie"))
             {
-                this->client->SetCookie(it->first, it->second);
-                ++it;
+                auto range = res->headers.equal_range("Set-Cookie");
+
+                size_t index = 0;
+                for (auto range_it = range.first; range_it != range.second; ++range_it)
+                {
+                    std::vector<std::string> cookies = Util::Split(range_it->second, ";");
+                    for (std::vector<std::string>::iterator it = cookies.begin(); it != cookies.end();)
+                    {
+                        std::vector<std::string> cookie = Util::Split(*it, "=");
+                        std::string key = Util::Trim(cookie[0], " ");
+                        if (ignore_cookie_keys.find(key) == ignore_cookie_keys.end())
+                        {
+                            if (cookie.size() > 1)
+                            {
+                                this->cookies[key] = Util::Trim(cookie[1], " ");
+                            }
+                            else
+                            {
+                                this->cookies[key] = "";
+                            }
+                        }
+                        ++it;
+                    }
+                }
+
+                this->connected = true;
+                return 1;
+            }
+            else
+            {
+                return 0;
             }
         }
-        this->connected = true;
-        return 1;
+        else
+        {
+            return 0;
+        }
     }
-
-    return 0;
+    else
+    {
+        return 0;
+    }
 }

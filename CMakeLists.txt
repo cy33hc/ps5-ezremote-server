@@ -29,7 +29,7 @@ add_executable(${PROJECT_NAME}.elf
   source/main.cpp
 )
 
-target_compile_definitions(${PROJECT_NAME}.elf PRIVATE EZREMOTE_VERSION=${APP_VERSION} CPPHTTPLIB_THREAD_POOL_COUNT=64)
+target_compile_definitions(${PROJECT_NAME}.elf PRIVATE EZREMOTE_VERSION=${APP_VERSION} CPPHTTPLIB_THREAD_POOL_COUNT=64 CPPHTTPLIB_OPENSSL_SUPPORT=1)
 
 target_link_libraries(${PROJECT_NAME}.elf
   zstd
@@ -38,7 +38,6 @@ target_link_libraries(${PROJECT_NAME}.elf
   httpclient
   crypto
   ssl
-  curl
   json-c
   smb2
   ssh2
