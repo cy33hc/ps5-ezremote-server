@@ -57,6 +57,7 @@ struct BgDownloadData {
     DownloadState state;
     uint64_t id;
     uint64_t timestamp;
+    int32_t failed_attempts;
 };
 
 extern uint64_t *g_bytes_transfered;

@@ -201,6 +201,7 @@ namespace CONFIG
                 history_item.state = static_cast<DownloadState>(json_object_get_int(json_object_object_get(history_item_obj, "state")));
                 history_item.id = json_object_get_uint64(json_object_object_get(history_item_obj, "id"));
                 history_item.timestamp = json_object_get_uint64(json_object_object_get(history_item_obj, "timestamp"));
+                history_item.failed_attempts = json_object_get_int(json_object_object_get(history_item_obj, "failed_attempts"));
 
                 AddBgDownloadData(history_item);
             }
@@ -247,6 +248,7 @@ namespace CONFIG
                 json_object_object_add(history_item_obj, "state", json_object_new_int(it->state));
                 json_object_object_add(history_item_obj, "id", json_object_new_uint64(it->id));
                 json_object_object_add(history_item_obj, "timestamp", json_object_new_uint64(it->timestamp));
+                json_object_object_add(history_item_obj, "failed_attempts", json_object_new_int(it->failed_attempts));
 
                 json_object_array_add(history_list, history_item_obj);
             }

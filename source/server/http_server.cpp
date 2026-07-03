@@ -232,7 +232,7 @@ namespace HttpServer
 
                     DeleteRemoteClient(tmp_client);
                 }
-                else if (bg_download_list[i].state == STATE_DOWNLOADING || bg_download_list[i].state == STATE_FAILED)
+                else if (bg_download_list[i].state == STATE_DOWNLOADING || (bg_download_list[i].state == STATE_FAILED && bg_download_list[i].failed_attempts < 3))
                 {
                     // Resume interrupted download
                     RemoteClient *tmp_client = GetRemoteClient(&(bg_download_list[i].host_info));
@@ -270,7 +270,8 @@ namespace HttpServer
                     if (ret == 0)
                     {
                         bg_download_list[i].state = STATE_FAILED;
-                        Util::RichNotify(bg_download_list[i].id, "Failed to download %s", bg_download_list[i].dest_path.c_str());
+                        bg_download_list[i].failed_attempts++;
+                        Util::RichNotify(bg_download_list[i].id, "Failed to download %s. Attempts: %d", bg_download_list[i].dest_path.c_str(), bg_download_list[i].failed_attempts);
                     }
                     else
                     {
@@ -423,6 +424,7 @@ namespace HttpServer
                 download_data.id = id_param;
                 download_data.bytes_transfered = 0;
                 download_data.timestamp = Util::GetTick();
+                download_data.failed_attempts = 0;
 
                 if (username_param != nullptr)
                     download_data.host_info.username = username_param;
