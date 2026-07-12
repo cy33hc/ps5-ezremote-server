@@ -232,7 +232,7 @@ namespace HttpServer
 
                     DeleteRemoteClient(tmp_client);
                 }
-                else if (bg_download_list[i].state == STATE_DOWNLOADING || (bg_download_list[i].state == STATE_FAILED && bg_download_list[i].failed_attempts < 3))
+                else if (bg_download_list[i].state == STATE_DOWNLOADING || (bg_download_list[i].state == STATE_FAILED && bg_download_list[i].failed_attempts < 5))
                 {
                     // Resume interrupted download
                     RemoteClient *tmp_client = GetRemoteClient(&(bg_download_list[i].host_info));
@@ -505,8 +505,14 @@ namespace HttpServer
             return;
         }
 
-        Util::Notify("Starting ezRemote Server %.2f on port %d", EZREMOTE_VERSION, http_server_port);
-        ServerThread(nullptr);
+        while (svr->is_valid() && !svr->is_running())
+        {
+            Util::Notify("Starting ezRemote Server %.2f on port %d", EZREMOTE_VERSION, http_server_port);
+            ServerThread(nullptr);
+
+            delete svr;
+            svr = new Server();
+        }
     }
 
     void Stop()

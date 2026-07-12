@@ -5,7 +5,7 @@ project(ezremote-server)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -Wno-keyword-macro -fPIC -fPIE -march=znver2 -Wall -fstack-protector-all")
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -gdwarf-2 -O0 -pedantic -pedantic-errors")
 
-set(APP_VERSION "1.07")
+set(APP_VERSION "1.08")
 
 include_directories(
   source
