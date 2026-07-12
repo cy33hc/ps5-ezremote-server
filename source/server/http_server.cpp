@@ -26,6 +26,7 @@ int http_server_port = 6701;
 static pthread_t bg_download_thread;
 static uint64_t g_dl_offset;
 static bool stop_download = false;
+static bool stop_server = false;
 
 namespace HttpServer
 {
@@ -461,6 +462,7 @@ namespace HttpServer
 
         svr->Get("/stop", [&](const Request & /*req*/, Response & /*res*/)
         {
+            stop_server = true;
             svr->stop();
         });
 
@@ -505,20 +507,23 @@ namespace HttpServer
             return;
         }
 
-        while (svr->is_valid() && !svr->is_running())
+        while (!stop_server)
         {
             Util::Notify("Starting ezRemote Server %.2f on port %d", EZREMOTE_VERSION, http_server_port);
             ServerThread(nullptr);
 
-            delete svr;
-            svr = new Server();
+            if (!stop_server)
+            {
+                delete svr;
+                svr = new Server();
+            }
         }
     }
 
     void Stop()
     {
-        if (svr != nullptr)
-            svr->stop();
+        stop_server = true;
+        svr->stop();
     }
 
     void StartDownloadThread()
