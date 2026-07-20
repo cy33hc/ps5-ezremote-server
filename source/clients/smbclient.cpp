@@ -16,6 +16,26 @@
 #include "clients/smbclient.h"
 #include "util.h"
 
+struct AsyncOpenContext
+{
+    struct smb2fh *fh;
+    int result;
+    bool complete;
+};
+
+struct AsyncReadContext
+{
+    DataSink *sink;
+    uint8_t *buff;
+    size_t bytes_remaining;
+    int result;
+    bool complete;
+    struct smb2_context *smb2;
+    struct smb2fh *fh;
+    uint32_t max_read_size;
+};
+
+
 SmbClient::SmbClient()
 {
 }
@@ -145,12 +165,6 @@ int SmbClient::Get(const std::string &outputfile, const std::string &ppath, uint
 }
 
 
-struct AsyncOpenContext
-{
-    struct smb2fh *fh;
-    int result;
-    bool complete;
-};
 
 static void smb2_async_open_cb(struct smb2_context *smb2, int status, void *command_data, void *private_data)
 {
@@ -227,17 +241,6 @@ int SmbClient::GetRange(const std::string &ppath, DataSink &sink, uint64_t size,
     return result;
 }
 
-struct AsyncReadContext
-{
-    DataSink *sink;
-    uint8_t *buff;
-    size_t bytes_remaining;
-    int result;
-    bool complete;
-    struct smb2_context *smb2;
-    struct smb2fh *fh;
-    uint32_t max_read_size;
-};
 
 static void smb2_async_read_cb(struct smb2_context *smb2, int status, void *command_data, void *private_data)
 {
