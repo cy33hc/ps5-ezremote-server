@@ -8,6 +8,8 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <poll.h>
+#include <algorithm>
 #include <inttypes.h>
 #include <errno.h>
 #include "sceSystemService.h"
@@ -15,6 +17,7 @@
 #include "fs.h"
 #include "clients/smbclient.h"
 #include "util.h"
+#include "dbglogger.h"
 
 struct AsyncOpenContext
 {
@@ -168,6 +171,7 @@ int SmbClient::Get(const std::string &outputfile, const std::string &ppath, uint
 
 static void smb2_async_open_cb(struct smb2_context *smb2, int status, void *command_data, void *private_data)
 {
+    dbglogger_log("smb2_async_open_cb: status=%d", status);
     AsyncOpenContext *ctx = (AsyncOpenContext *)private_data;
     if (status < 0)
     {
@@ -184,12 +188,14 @@ static void smb2_async_open_cb(struct smb2_context *smb2, int status, void *comm
 
 static void smb2_async_close_cb(struct smb2_context *smb2, int status, void *command_data, void *private_data)
 {
+    dbglogger_log("smb2_async_close_cb: status=%d", status);
     bool *complete = (bool *)private_data;
     *complete = true;
 }
 
 int SmbClient::GetRange(const std::string &ppath, DataSink &sink, uint64_t size, uint64_t offset)
 {
+    dbglogger_log("SmbClient::GetRange(path): path=%s, size=%llu, offset=%llu", ppath.c_str(), size, offset);
     std::string path = std::string(ppath);
     path = Util::Trim(path, "/");
 
@@ -198,10 +204,14 @@ int SmbClient::GetRange(const std::string &ppath, DataSink &sink, uint64_t size,
     open_ctx.fh = NULL;
     open_ctx.result = 0;
     open_ctx.complete = false;
-
+    dbglogger_log("GetRange(path): calling smb2_open_async");
     int ret = smb2_open_async(smb2, path.c_str(), O_RDONLY, smb2_async_open_cb, &open_ctx);
+    dbglogger_log("GetRange(path): smb2_open_async returned %d", ret);
     if (ret != 0)
-        return 0;
+    {
+            dbglogger_log("GetRange(path): smb2_open_async failed, ret=%d", ret);
+            return 0;
+    }
 
     struct pollfd pfd;
     while (!open_ctx.complete)
@@ -209,21 +219,30 @@ int SmbClient::GetRange(const std::string &ppath, DataSink &sink, uint64_t size,
         pfd.fd = smb2_get_fd(smb2);
         pfd.events = smb2_which_events(smb2);
         if (poll(&pfd, 1, 1000) < 0)
-            return 0;
+        {
+                dbglogger_log("GetRange(path): poll failed during open");
+                return 0;
+        }
         if (pfd.revents == 0)
             continue;
         if (smb2_service(smb2, pfd.revents) < 0)
+        {
+                dbglogger_log("GetRange(path): smb2_service failed during open");
+                return 0;
+        }
+    }
+    dbglogger_log("GetRange(path): open complete, fh=%p", open_ctx.fh);
+    if (open_ctx.fh == NULL)
+    {
+            dbglogger_log("GetRange(path): open failed, fh is NULL");
             return 0;
     }
 
-    if (open_ctx.fh == NULL)
-        return 0;
 
-
-    // Async read
+    dbglogger_log("GetRange(path): calling GetRange(fp)");
     int result = this->GetRange((void *)open_ctx.fh, sink, size, offset);
 
-    // Async close
+    dbglogger_log("GetRange(path): GetRange(fp) returned %d, calling close_async", result);
     bool close_complete = false;
     smb2_close_async(smb2, open_ctx.fh, smb2_async_close_cb, &close_complete);
     while (!close_complete)
@@ -237,17 +256,19 @@ int SmbClient::GetRange(const std::string &ppath, DataSink &sink, uint64_t size,
         if (smb2_service(smb2, pfd.revents) < 0)
             break;
     }
-
+    dbglogger_log("GetRange(path): close complete, returning %d", result);
     return result;
 }
 
 
 static void smb2_async_read_cb(struct smb2_context *smb2, int status, void *command_data, void *private_data)
 {
+    dbglogger_log("smb2_async_read_cb: status=%d, bytes_remaining=%zu", status, ((AsyncReadContext *)private_data)->bytes_remaining);
     AsyncReadContext *ctx = (AsyncReadContext *)private_data;
 
     if (status < 0)
     {
+        dbglogger_log("smb2_async_read_cb: read failed, status=%d", status);
         ctx->result = 0;
         ctx->complete = true;
         return;
@@ -258,10 +279,12 @@ static void smb2_async_read_cb(struct smb2_context *smb2, int status, void *comm
         ctx->complete = true;
         return;
     }
-
+    dbglogger_log("smb2_async_read_cb: writing %d bytes to sink", status);
     bool ok = ctx->sink->write((char *)ctx->buff, status);
+    dbglogger_log("smb2_async_read_cb: sink write ok=%d", ok);
     if (!ok)
     {
+        dbglogger_log("smb2_async_read_cb: sink write failed");
         ctx->result = 0;
         ctx->complete = true;
         return;
@@ -275,24 +298,29 @@ static void smb2_async_read_cb(struct smb2_context *smb2, int status, void *comm
     }
 
     size_t bytes_to_read = std::min<size_t>(ctx->max_read_size, ctx->bytes_remaining);
+    dbglogger_log("smb2_async_read_cb: calling next smb2_pread_async, bytes_to_read=%zu, bytes_remaining=%zu", bytes_to_read, ctx->bytes_remaining);
     int ret = smb2_pread_async(ctx->smb2, ctx->fh, ctx->buff, bytes_to_read, 0, smb2_async_read_cb, ctx);
+    dbglogger_log("smb2_async_read_cb: smb2_pread_async returned %d", ret);
     if (ret != 0)
     {
+        dbglogger_log("smb2_async_read_cb: next smb2_pread_async failed, ret=%d", ret);
         ctx->result = 0;
         ctx->complete = true;
     }
 }
 
 
-}
-
 int SmbClient::GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offset)
 {
+    dbglogger_log("SmbClient::GetRange(fp): size=%llu, offset=%llu", size, offset);
     struct smb2fh *in = (struct smb2fh *)fp;
 
     uint8_t *buff = (uint8_t *)malloc(max_read_size);
     if (buff == NULL)
-        return 0;
+    {
+            dbglogger_log("GetRange(fp): malloc failed");
+            return 0;
+    }
 
     AsyncReadContext ctx = {};
     ctx.sink = &sink;
@@ -305,16 +333,22 @@ int SmbClient::GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offset
     ctx.max_read_size = max_read_size;
 
     // Seek to offset, then kick off first async read
+    dbglogger_log("GetRange(fp): calling smb2_lseek, offset=%llu", offset);
     smb2_lseek(smb2, in, offset, SEEK_SET, NULL);
+    dbglogger_log("GetRange(fp): smb2_lseek complete");
     size_t bytes_to_read = std::min<size_t>(max_read_size, size);
+    dbglogger_log("GetRange(fp): calling smb2_pread_async, bytes_to_read=%zu", bytes_to_read);
     int ret = smb2_pread_async(smb2, in, buff, bytes_to_read, 0, smb2_async_read_cb, &ctx);
+    dbglogger_log("GetRange(fp): smb2_pread_async returned %d", ret);
     if (ret != 0)
     {
+
+        dbglogger_log("GetRange(fp): initial smb2_pread_async failed, ret=%d", ret);
         free(buff);
         return 0;
     }
 
-    // Service the event loop until transfer is complete
+    dbglogger_log("GetRange(fp): entering event loop");
     struct pollfd pfd;
     while (!ctx.complete)
     {
@@ -334,6 +368,7 @@ int SmbClient::GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offset
         }
     }
 
+    dbglogger_log("GetRange(fp): event loop done, result=%d", ctx.result);
     free(buff);
     return ctx.result;
 }
