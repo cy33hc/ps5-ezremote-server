@@ -283,24 +283,7 @@ static void smb2_async_read_cb(struct smb2_context *smb2, int status, void *comm
     }
 }
 
-static void smb2_async_lseek_cb(struct smb2_context *smb2, int status, void *command_data, void *private_data)
-{
-    AsyncReadContext *ctx = (AsyncReadContext *)private_data;
 
-    if (status < 0)
-    {
-        ctx->result = 0;
-        ctx->complete = true;
-        return;
-    }
-
-    size_t bytes_to_read = std::min<size_t>(ctx->max_read_size, ctx->bytes_remaining);
-    int ret = smb2_pread_async(ctx->smb2, ctx->fh, ctx->buff, bytes_to_read, 0, smb2_async_read_cb, ctx);
-    if (ret != 0)
-    {
-        ctx->result = 0;
-        ctx->complete = true;
-    }
 }
 
 int SmbClient::GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offset)
@@ -321,8 +304,10 @@ int SmbClient::GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offset
     ctx.fh = in;
     ctx.max_read_size = max_read_size;
 
-    // Kick off async lseek, which chains into async reads
-    int ret = smb2_lseek_async(smb2, in, offset, SEEK_SET, smb2_async_lseek_cb, &ctx);
+    // Seek to offset, then kick off first async read
+    smb2_lseek(smb2, in, offset, SEEK_SET, NULL);
+    size_t bytes_to_read = std::min<size_t>(max_read_size, size);
+    int ret = smb2_pread_async(smb2, in, buff, bytes_to_read, 0, smb2_async_read_cb, &ctx);
     if (ret != 0)
     {
         free(buff);
