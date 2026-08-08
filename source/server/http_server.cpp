@@ -1,5 +1,6 @@
 #include <string>
 #include <json-c/json.h>
+#include <pthread.h>
 #include "http/httplib.h"
 #include "server/http_server.h"
 #include "clients/remote_client.h"
@@ -27,6 +28,9 @@ static pthread_t bg_download_thread;
 static uint64_t g_dl_offset;
 static bool stop_download = false;
 static bool stop_server = false;
+static bool download_paused = false;
+static pthread_mutex_t download_pause_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t download_pause_cond = PTHREAD_COND_INITIALIZER;
 
 namespace HttpServer
 {
@@ -190,6 +194,17 @@ namespace HttpServer
 
         while (!stop_download)
         {
+            // Wait while paused (e.g. during rest mode)
+            pthread_mutex_lock(&download_pause_mutex);
+            while (download_paused && !stop_download)
+            {
+                pthread_cond_wait(&download_pause_cond, &download_pause_mutex);
+            }
+            pthread_mutex_unlock(&download_pause_mutex);
+
+            if (stop_download)
+                break;
+
             for (int i=0; i < bg_download_list.size(); i++)
             {
                 if (bg_download_list[i].state == STATE_PENDING)
@@ -220,8 +235,13 @@ namespace HttpServer
 
                     if (ret == 0)
                     {
-                        bg_download_list[i].state = STATE_FAILED;
-                        Util::RichNotify(bg_download_list[i].id, "Failed to download %s", bg_download_list[i].dest_path.c_str());
+                        if (!download_paused)
+                        {
+                            bg_download_list[i].state = STATE_FAILED;
+                            Util::RichNotify(bg_download_list[i].id, "Failed to download %s", bg_download_list[i].dest_path.c_str());
+                            sleep(5);
+                        }
+                        break;
                     }
                     else
                     {
@@ -270,9 +290,19 @@ namespace HttpServer
 
                     if (ret == 0)
                     {
-                        bg_download_list[i].state = STATE_FAILED;
-                        bg_download_list[i].failed_attempts++;
-                        Util::RichNotify(bg_download_list[i].id, "Failed to download %s. Attempts: %d", bg_download_list[i].dest_path.c_str(), bg_download_list[i].failed_attempts);
+                        if (!download_paused)
+                        {
+                            bg_download_list[i].state = STATE_FAILED;
+                            bg_download_list[i].failed_attempts++;
+                            Util::RichNotify(bg_download_list[i].id, "Failed to download %s. Attempts: %d", bg_download_list[i].dest_path.c_str(), bg_download_list[i].failed_attempts);
+                            if (bg_download_list[i].failed_attempts >= 5)
+                            {
+                                CONFIG::SaveBgDownloadData();
+                                DeleteRemoteClient(tmp_client);
+                            }
+                            sleep(bg_download_list[i].failed_attempts * 5);
+                        }
+                        break;
                     }
                     else
                     {
@@ -496,6 +526,21 @@ namespace HttpServer
         svr->listen("0.0.0.0", http_server_port);
 
         return NULL;
+    }
+
+    void PauseDownloadThread()
+    {
+        pthread_mutex_lock(&download_pause_mutex);
+        download_paused = true;
+        pthread_mutex_unlock(&download_pause_mutex);
+    }
+
+    void ResumeDownloadThread()
+    {
+        pthread_mutex_lock(&download_pause_mutex);
+        download_paused = false;
+        pthread_cond_signal(&download_pause_cond);
+        pthread_mutex_unlock(&download_pause_mutex);
     }
 
     void Start()
