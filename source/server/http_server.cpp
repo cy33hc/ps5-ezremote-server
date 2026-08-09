@@ -28,7 +28,7 @@ static pthread_t bg_download_thread;
 static uint64_t g_dl_offset;
 static bool stop_download = false;
 static bool stop_server = false;
-static bool download_paused = false;
+static bool in_rest_mode = false;
 static pthread_mutex_t download_pause_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t download_pause_cond = PTHREAD_COND_INITIALIZER;
 
@@ -196,7 +196,7 @@ namespace HttpServer
         {
             // Wait while paused (e.g. during rest mode)
             pthread_mutex_lock(&download_pause_mutex);
-            while (download_paused && !stop_download)
+            while (in_rest_mode && !stop_download)
             {
                 pthread_cond_wait(&download_pause_cond, &download_pause_mutex);
             }
@@ -235,12 +235,13 @@ namespace HttpServer
 
                     if (ret == 0)
                     {
-                        if (!download_paused)
+                        if (!in_rest_mode)
                         {
                             bg_download_list[i].state = STATE_FAILED;
                             Util::RichNotify(bg_download_list[i].id, "Failed to download %s", bg_download_list[i].dest_path.c_str());
-                            sleep(5);
                         }
+                        DeleteRemoteClient(tmp_client);
+                        sleep(5);
                         break;
                     }
                     else
@@ -290,7 +291,7 @@ namespace HttpServer
 
                     if (ret == 0)
                     {
-                        if (!download_paused)
+                        if (!in_rest_mode)
                         {
                             bg_download_list[i].state = STATE_FAILED;
                             bg_download_list[i].failed_attempts++;
@@ -298,10 +299,10 @@ namespace HttpServer
                             if (bg_download_list[i].failed_attempts >= 5)
                             {
                                 CONFIG::SaveBgDownloadData();
-                                DeleteRemoteClient(tmp_client);
                             }
-                            sleep(bg_download_list[i].failed_attempts * 5);
                         }
+                        DeleteRemoteClient(tmp_client);
+                        sleep(bg_download_list[i].failed_attempts * 5);
                         break;
                     }
                     else
@@ -531,14 +532,14 @@ namespace HttpServer
     void PauseDownloadThread()
     {
         pthread_mutex_lock(&download_pause_mutex);
-        download_paused = true;
+        in_rest_mode = true;
         pthread_mutex_unlock(&download_pause_mutex);
     }
 
     void ResumeDownloadThread()
     {
         pthread_mutex_lock(&download_pause_mutex);
-        download_paused = false;
+        in_rest_mode = false;
         pthread_cond_signal(&download_pause_cond);
         pthread_mutex_unlock(&download_pause_mutex);
     }
@@ -554,13 +555,23 @@ namespace HttpServer
 
         while (!stop_server)
         {
-            Util::Notify("Starting ezRemote Server %.2f on port %d", EZREMOTE_VERSION, http_server_port);
-            ServerThread(nullptr);
+            if (!in_rest_mode)
+            {
+                Util::Notify("Starting ezRemote Server %.2f on port %d", EZREMOTE_VERSION, http_server_port);
+                ServerThread(nullptr);
+            }
 
             if (!stop_server)
             {
-                delete svr;
-                svr = new Server();
+                if (!in_rest_mode)
+                {
+                    delete svr;
+                    svr = new Server();
+                }
+                else
+                {
+                    sleep(2);
+                }
             }
         }
     }
