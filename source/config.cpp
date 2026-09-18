@@ -98,6 +98,7 @@ namespace CONFIG
                 std::string encrypted_password = std::string(json_object_get_string(json_object_object_get(history_item_obj, "password")));
                 history_item.host_info.type = json_object_get_int(json_object_object_get(history_item_obj, "type"));
                 history_item.timestamp = json_object_get_uint64(json_object_object_get(history_item_obj, "timestamp"));
+                history_item.size = json_object_get_uint64(json_object_object_get(history_item_obj, "file_size"));
                 history_item.host_info.client = nullptr;
 
                 if (history_item.host_info.type == CLIENT_TYPE_HTTP_SERVER)
@@ -139,6 +140,7 @@ namespace CONFIG
                 json_object_object_add(history_item_obj, "username", json_object_new_string(it->second.host_info.username.c_str()));
                 json_object_object_add(history_item_obj, "type", json_object_new_int(it->second.host_info.type));
                 json_object_object_add(history_item_obj, "timestamp", json_object_new_uint64(it->second.timestamp));
+                json_object_object_add(history_item_obj, "file_size", json_object_new_uint64(it->second.size));
                 if (it->second.host_info.type == CLIENT_TYPE_HTTP_SERVER)
                 {
                     json_object_object_add(history_item_obj, "http_server_type", json_object_new_string(it->second.host_info.http_server_type.c_str()));

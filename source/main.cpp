@@ -13,7 +13,7 @@
 #include "sceSystemService.h"
 #include "config.h"
 #include "util.h"
-//#include "dbglogger.h"
+// #include "dbglogger.h"
 
 static bool in_rest_mode = false;
 static bool stop_monitoring = false;

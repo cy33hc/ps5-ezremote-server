@@ -14,6 +14,7 @@
 #include "config.h"
 #include "fs.h"
 #include "util.h"
+// #include "dbglogger.h"
 
 #define SUCCESS_MSG "{ \"result\": { \"success\": true, \"error\": null } }"
 #define FAILURE_MSG "{ \"result\": { \"success\": false, \"error\": \"%s\" } }"
@@ -339,6 +340,7 @@ namespace HttpServer
             const char *password_param;
             const char *http_server_type_param;
             int type_param;
+            uint64_t file_size;
 
             json_object *jobj = json_tokener_parse(req.body.c_str());
             if (jobj != nullptr)
@@ -350,6 +352,7 @@ namespace HttpServer
                 password_param = json_object_get_string(json_object_object_get(jobj, "password"));
                 http_server_type_param = json_object_get_string(json_object_object_get(jobj, "http_server_type"));
                 type_param = json_object_get_int(json_object_object_get(jobj, "type"));
+                file_size = json_object_get_uint64(json_object_object_get(jobj, "file_size"));
 
                 if (url_param == nullptr || hash_param == nullptr)
                 {
@@ -369,6 +372,7 @@ namespace HttpServer
                     pkg_data.host_info.http_server_type = http_server_type_param;
                 pkg_data.timestamp = Util::GetTick();
                 pkg_data.host_info.type = type_param;
+                pkg_data.size = file_size;
                 pkg_data.host_info.client = nullptr;
 
                 CONFIG::AddPackageInstallHostData(hash_param, pkg_data);
@@ -398,14 +402,12 @@ namespace HttpServer
             std::string path = pkg_host_data->path;
 
             res.status = 206;
-            size_t range_len = (req.ranges[0].second - req.ranges[0].first) + 1;
                 
-            std::pair<ssize_t, ssize_t> range = req.ranges[0];
             res.set_content_provider(
-                range_len, "application/octet-stream",
-                [tmp_client, path, range, range_len](size_t offset, size_t length, DataSink &sink) {
+                pkg_host_data->size, "application/octet-stream",
+                [tmp_client, path](size_t offset, size_t length, DataSink &sink) {
                     int ret;
-                    ret = tmp_client->GetRange(path, sink, range_len, range.first);
+                    ret = tmp_client->GetRange(path, sink, length, offset);
                     return (ret==1);
                 },
                 [tmp_client](bool success) {
