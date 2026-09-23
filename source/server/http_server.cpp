@@ -14,7 +14,6 @@
 #include "config.h"
 #include "fs.h"
 #include "util.h"
-// #include "dbglogger.h"
 
 #define SUCCESS_MSG "{ \"result\": { \"success\": true, \"error\": null } }"
 #define FAILURE_MSG "{ \"result\": { \"success\": false, \"error\": \"%s\" } }"

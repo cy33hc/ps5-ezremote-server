@@ -1239,7 +1239,7 @@ int FtpClient::GetRange(const std::string &path, DataSink &sink, uint64_t size, 
 		return 0;
 	}
 
-	char buf[FTP_CLIENT_BUFSIZ];
+	char *buf = (char*)malloc(FTP_CLIENT_BUFSIZ);
 	int count = 0;
 	size_t bytes_remaining = size;
 
@@ -1253,6 +1253,7 @@ int FtpClient::GetRange(const std::string &path, DataSink &sink, uint64_t size, 
 			bool ok = sink.write((char *)buf, count);
 			if (!ok)
 			{
+				free(buf);
 				FtpClose(nData);
 				mp_ftphandle->offset = 0;
 				return 0;
@@ -1263,6 +1264,8 @@ int FtpClient::GetRange(const std::string &path, DataSink &sink, uint64_t size, 
 			break;
 		}
 	} while (1);
+
+	free(buf);
 	FtpClose(nData);
 	mp_ftphandle->offset = 0;
 
