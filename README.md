@@ -1,6 +1,6 @@
 # PS5 ezRemote Server
 
-This is a payload that runs in the background to allow installing PS4 packages from ftp/sftp, nfs, smb, webdav, http servers (rclone, MS IIS, apache, nginx, npxserve), github, archive.org and any direct http links.
+This is a payload that runs in the background to allow installing PS4 and PS5 packages from ftp/sftp, nfs, smb, webdav, http servers (rclone, MS IIS, apache, nginx, npxserve), github, archive.org and any direct http links.
 
 This is mainly used with ezRemote Client which allows you to browse files on the remote servers and submit request to ezRemote Server for installing.
 
