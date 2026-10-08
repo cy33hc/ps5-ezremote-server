@@ -25,6 +25,12 @@ std::shared_mutex pkg_mutex_;
 std::shared_mutex download_mutex_;
 uint64_t *g_bytes_transfered;
 
+static std::string JsonGetString(json_object *obj, const char *key, const std::string &default_value = "")
+{
+    const char *value = json_object_get_string(json_object_object_get(obj, key));
+    return value != nullptr ? std::string(value) : default_value;
+}
+
 namespace CONFIG
 {
     int Encrypt(const std::string &text, std::string &encrypt_text)
@@ -84,18 +90,25 @@ namespace CONFIG
         if (FS::FileExists(PKG_INSTALL_HISTORY_PATH))
         {
             json_object *jobj = json_object_from_file(PKG_INSTALL_HISTORY_PATH);
+            if (jobj == nullptr)
+                return;
             struct array_list *history_list = json_object_get_array(jobj);
+            if (history_list == nullptr)
+            {
+                json_object_put(jobj);
+                return;
+            }
 
             for (size_t history_idx = 0; history_idx < history_list->length; ++history_idx)
             {
                 PackageInstallData history_item;
 
                 json_object *history_item_obj = (json_object *)array_list_get_idx(history_list, history_idx);
-                std::string hash = std::string(json_object_get_string(json_object_object_get(history_item_obj, "hash")));
-                history_item.host_info.url = std::string(json_object_get_string(json_object_object_get(history_item_obj, "url")));
-                history_item.path = std::string(json_object_get_string(json_object_object_get(history_item_obj, "path")));
-                history_item.host_info.username = std::string(json_object_get_string(json_object_object_get(history_item_obj, "username")));
-                std::string encrypted_password = std::string(json_object_get_string(json_object_object_get(history_item_obj, "password")));
+                std::string hash = JsonGetString(history_item_obj, "hash");
+                history_item.host_info.url = JsonGetString(history_item_obj, "url");
+                history_item.path = JsonGetString(history_item_obj, "path");
+                history_item.host_info.username = JsonGetString(history_item_obj, "username");
+                std::string encrypted_password = JsonGetString(history_item_obj, "password");
                 history_item.host_info.type = json_object_get_int(json_object_object_get(history_item_obj, "type"));
                 history_item.timestamp = json_object_get_uint64(json_object_object_get(history_item_obj, "timestamp"));
                 history_item.size = json_object_get_uint64(json_object_object_get(history_item_obj, "file_size"));
@@ -103,7 +116,7 @@ namespace CONFIG
 
                 if (history_item.host_info.type == CLIENT_TYPE_HTTP_SERVER)
 		        {
-                    history_item.host_info.http_server_type = std::string(json_object_get_string(json_object_object_get(history_item_obj, "http_server_type")));
+                    history_item.host_info.http_server_type = JsonGetString(history_item_obj, "http_server_type");
                 }
 
                 int ret = Decrypt(encrypted_password, history_item.host_info.password);
@@ -129,7 +142,7 @@ namespace CONFIG
         json_object *history_list = json_object_new_array();
         uint64_t current_time = Util::GetTick();
 
-        for (auto it = pkg_download_history.begin(); it != pkg_download_history.end(); ++it)
+        for (auto it = pkg_download_history.begin(); it != pkg_download_history.end();)
         {
             if (current_time - it->second.timestamp < MAX_PKG_HISTORY_RETENTION)
             {
@@ -154,6 +167,17 @@ namespace CONFIG
                 json_object_object_add(history_item_obj, "password", json_object_new_string(encrypted_password.c_str()));
 
                 json_object_array_add(history_list, history_item_obj);
+                ++it;
+            }
+            else
+            {
+                if (it->second.host_info.client != nullptr)
+                {
+                    delete it->second.host_info.client;
+                    it->second.host_info.client = nullptr;
+                }
+
+                it = pkg_download_history.erase(it);
             }
         }
         
@@ -172,7 +196,14 @@ namespace CONFIG
         if (FS::FileExists(BG_DOWNLOAD_HISTORY_PATH))
         {
             json_object *jobj = json_object_from_file(BG_DOWNLOAD_HISTORY_PATH);
+            if (jobj == nullptr)
+                return;
             struct array_list *history_list = json_object_get_array(jobj);
+            if (history_list == nullptr)
+            {
+                json_object_put(jobj);
+                return;
+            }
 
             for (size_t history_idx = 0; history_idx < history_list->length; ++history_idx)
             {
@@ -180,14 +211,14 @@ namespace CONFIG
 
                 json_object *history_item_obj = (json_object *)array_list_get_idx(history_list, history_idx);
                 history_item.host_info.type = json_object_get_int(json_object_object_get(history_item_obj, "type"));
-                history_item.host_info.url = std::string(json_object_get_string(json_object_object_get(history_item_obj, "url")));
-                history_item.host_info.username = std::string(json_object_get_string(json_object_object_get(history_item_obj, "username")));
-                std::string encrypted_password = std::string(json_object_get_string(json_object_object_get(history_item_obj, "password")));
+                history_item.host_info.url = JsonGetString(history_item_obj, "url");
+                history_item.host_info.username = JsonGetString(history_item_obj, "username");
+                std::string encrypted_password = JsonGetString(history_item_obj, "password");
                 history_item.host_info.client = nullptr;
 
                 if (history_item.host_info.type == CLIENT_TYPE_HTTP_SERVER)
 		        {
-                    history_item.host_info.http_server_type = std::string(json_object_get_string(json_object_object_get(history_item_obj, "http_server_type")));
+                    history_item.host_info.http_server_type = JsonGetString(history_item_obj, "http_server_type");
                 }
 
                 int ret = Decrypt(encrypted_password, history_item.host_info.password);
@@ -196,8 +227,8 @@ namespace CONFIG
                     history_item.host_info.password = encrypted_password;
                 }
 
-                history_item.src_path = std::string(json_object_get_string(json_object_object_get(history_item_obj, "src_path")));
-                history_item.dest_path = std::string(json_object_get_string(json_object_object_get(history_item_obj, "dest_path")));
+                history_item.src_path = JsonGetString(history_item_obj, "src_path");
+                history_item.dest_path = JsonGetString(history_item_obj, "dest_path");
                 history_item.file_size = json_object_get_uint64(json_object_object_get(history_item_obj, "file_size"));
                 history_item.bytes_transfered = json_object_get_uint64(json_object_object_get(history_item_obj, "bytes_transfered"));
                 history_item.state = static_cast<DownloadState>(json_object_get_int(json_object_object_get(history_item_obj, "state")));

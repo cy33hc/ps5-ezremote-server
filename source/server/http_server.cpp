@@ -356,6 +356,7 @@ namespace HttpServer
                 if (url_param == nullptr || hash_param == nullptr)
                 {
                     bad_request(res, "Required url_param or hash parameter missing");
+                    json_object_put(jobj);
                     return;
                 }
 
@@ -376,6 +377,7 @@ namespace HttpServer
 
                 CONFIG::AddPackageInstallHostData(hash_param, pkg_data);
                 CONFIG::SavePackageInstallHostData();
+                json_object_put(jobj);
             }
         });
 
@@ -443,6 +445,7 @@ namespace HttpServer
                 if (url_param == nullptr || src_path_param == nullptr || dest_path_param == nullptr)
                 {
                     bad_request(res, "Required parameters are missing");
+                    json_object_put(jobj);
                     return;
                 }
 
@@ -468,6 +471,7 @@ namespace HttpServer
 
                 CONFIG::AddBgDownloadData(download_data);
                 CONFIG::SaveBgDownloadData();
+                json_object_put(jobj);
             }
         });
 
@@ -490,6 +494,7 @@ namespace HttpServer
 
             res.status = 200;
             res.set_content(payload_str, "application/json");
+            json_object_put(download_list);
         });
 
         svr->Get("/stop", [&](const Request & /*req*/, Response & /*res*/)
