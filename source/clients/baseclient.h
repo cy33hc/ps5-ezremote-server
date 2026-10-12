@@ -20,6 +20,7 @@ public:
     std::string GetFullPath(std::string path1);
     const char *LastResponse();
     int Quit();
+    void SetClientPathEncoding(bool enabled);
 
 protected:
     int SetCookies(httplib::Headers &headers);

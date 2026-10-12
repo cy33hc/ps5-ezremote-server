@@ -166,3 +166,11 @@ int BaseClient::Quit()
     }
     return 1;
 }
+
+void BaseClient::SetClientPathEncoding(bool enabled)
+{
+    if (client != nullptr)
+    {
+        this->client->set_url_encode(enabled);
+    }
+}
