@@ -17,6 +17,7 @@ public:
     int GetRange(const std::string &path, DataSink &sink, uint64_t size, uint64_t offset);
     int GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offset);
     const char *LastResponse();
+    bool IsConnected() const;
     int Quit();
 
 protected:

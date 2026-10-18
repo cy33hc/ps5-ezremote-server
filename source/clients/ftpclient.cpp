@@ -320,6 +320,11 @@ char *FtpClient::LastResponse()
 	return NULL;
 }
 
+bool FtpClient::IsConnected() const
+{
+	return mp_ftphandle != nullptr && mp_ftphandle->is_connected;
+}
+
 void FtpClient::ClearHandle()
 {
 	mp_ftphandle->dir = FTP_CLIENT_CONTROL;
@@ -1030,6 +1035,7 @@ int FtpClient::Quit()
 	struct linger lng = {1, 0};
 	setsockopt(mp_ftphandle->handle, SOL_SOCKET, SO_LINGER, &lng, sizeof(lng));
 	close(mp_ftphandle->handle);
+	mp_ftphandle->handle = 0;
 	mp_ftphandle->is_connected = false;
 
 	return 1;
@@ -1240,34 +1246,57 @@ int FtpClient::GetRange(const std::string &path, DataSink &sink, uint64_t size, 
 	}
 
 	char *buf = (char*)malloc(FTP_CLIENT_BUFSIZ);
-	int count = 0;
-	size_t bytes_remaining = size;
+	if (buf == NULL)
+	{
+		FtpClose(nData);
+		mp_ftphandle->offset = 0;
+		sprintf(mp_ftphandle->response, "Failed to allocate %u bytes", FTP_CLIENT_BUFSIZ);
+		return 0;
+	}
 
-	do
+	size_t bytes_remaining = size;
+	while (bytes_remaining > 0)
 	{
 		size_t bytes_to_read = std::min<size_t>(FTP_CLIENT_BUFSIZ, bytes_remaining);
-		count = FtpRead(buf, bytes_to_read, nData);
-		if (count > 0)
+		int count = FtpRead(buf, (int)bytes_to_read, nData);
+		if (count <= 0)
 		{
-			bytes_remaining -= count;
-			bool ok = sink.write((char *)buf, count);
-			if (!ok)
-			{
-				free(buf);
-				FtpClose(nData);
-				mp_ftphandle->offset = 0;
-				return 0;
-			}
-		}
-		else
-		{
+			// Error, or the file ended before the requested range was
+			// satisfied. FtpClose() below reports what the server made of it.
 			break;
 		}
-	} while (1);
 
+		bytes_remaining -= count;
+
+		if (!sink.write((char *)buf, count))
+		{
+			free(buf);
+			FtpClose(nData);
+			mp_ftphandle->offset = 0;
+			return 0;
+		}
+	}
+
+	int completed = FtpClose(nData);
 	free(buf);
-	FtpClose(nData);
 	mp_ftphandle->offset = 0;
+
+	if (bytes_remaining > 0)
+	{
+		// Report an error, otherwise the caller would re-request the same
+		// offset forever.
+		snprintf(mp_ftphandle->response, sizeof(mp_ftphandle->response),
+		         "Unexpected end of file at offset %" PRIu64,
+		         offset + (size - bytes_remaining));
+		return 0;
+	}
+
+	if (!completed)
+	{
+		snprintf(mp_ftphandle->response, sizeof(mp_ftphandle->response),
+		         "FTP transfer did not complete");
+		return 0;
+	}
 
 	return 1;
 }

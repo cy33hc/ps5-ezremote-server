@@ -1,4 +1,8 @@
 #include <string>
+#include <map>
+#include <mutex>
+#include <vector>
+#include <time.h>
 #include <json-c/json.h>
 #include <pthread.h>
 #include "http/httplib.h"
@@ -124,15 +128,232 @@ namespace HttpServer
         return;
     }
 
+    static const size_t CLIENT_POOL_MAX_IDLE = 4;
+    static const time_t CLIENT_POOL_MAX_IDLE_SECONDS = 300;
+
+    static std::mutex client_pool_mutex;
+    static std::map<std::string, std::vector<RemoteClient *>> client_pool_idle;
+    static std::map<RemoteClient *, std::string> client_pool_key;
+    static std::map<RemoteClient *, time_t> client_pool_idle_since;
+
+    static bool IsPooledClientType(int type)
+    {
+        return type == CLIENT_TYPE_SMB || type == CLIENT_TYPE_SFTP ||
+               type == CLIENT_TYPE_NFS || type == CLIENT_TYPE_FTP;
+    }
+
+    static std::string ClientPoolKey(const HostInfo &host_info)
+    {
+        return std::to_string(host_info.type) + "|" + host_info.url + "|" +
+               host_info.username + "|" + host_info.password;
+    }
+
+    static RemoteClient *CreatePooledClient(const HostInfo &host_info)
+    {
+        RemoteClient *client = nullptr;
+
+        if (host_info.type == CLIENT_TYPE_SMB)
+        {
+            client = new SmbClient();
+        }
+        else if (host_info.type == CLIENT_TYPE_SFTP)
+        {
+            client = new SFTPClient();
+        }
+        else if (host_info.type == CLIENT_TYPE_NFS)
+        {
+            client = new NfsClient();
+        }
+        else if (host_info.type == CLIENT_TYPE_FTP)
+        {
+            client = new FtpClient();
+        }
+
+        if (client != nullptr)
+        {
+            client->Connect(host_info.url, host_info.username, host_info.password);
+        }
+
+        return client;
+    }
+
+    static bool ClientIsConnected(RemoteClient *client)
+    {
+        SmbClient *smb_client = dynamic_cast<SmbClient *>(client);
+        if (smb_client != nullptr)
+        {
+            return smb_client->IsConnected();
+        }
+
+        SFTPClient *sftp_client = dynamic_cast<SFTPClient *>(client);
+        if (sftp_client != nullptr)
+        {
+            return sftp_client->IsConnected();
+        }
+
+        NfsClient *nfs_client = dynamic_cast<NfsClient *>(client);
+        if (nfs_client != nullptr)
+        {
+            return nfs_client->IsConnected();
+        }
+
+        FtpClient *ftp_client = dynamic_cast<FtpClient *>(client);
+        if (ftp_client != nullptr)
+        {
+            return ftp_client->IsConnected();
+        }
+
+        return false;
+    }
+
+    static void DestroyPooledClient(RemoteClient *client)
+    {
+        client->Quit();
+        delete client;
+    }
+
+    static RemoteClient *AcquireRemoteClient(const HostInfo &host_info)
+    {
+        const std::string key = ClientPoolKey(host_info);
+        std::vector<RemoteClient *> expired;
+        RemoteClient *client = nullptr;
+
+        {
+            std::lock_guard<std::mutex> lock(client_pool_mutex);
+
+            auto idle = client_pool_idle.find(key);
+            while (idle != client_pool_idle.end() && !idle->second.empty())
+            {
+                RemoteClient *candidate = idle->second.back();
+                idle->second.pop_back();
+
+                auto idle_since = client_pool_idle_since.find(candidate);
+                bool too_old = idle_since != client_pool_idle_since.end() &&
+                               (time(NULL) - idle_since->second) > CLIENT_POOL_MAX_IDLE_SECONDS;
+                client_pool_idle_since.erase(candidate);
+
+                if (too_old)
+                {
+                    // The server may have dropped the session while it was
+                    // idle. Drop it and try the next one.
+                    client_pool_key.erase(candidate);
+                    expired.push_back(candidate);
+                    continue;
+                }
+
+                client = candidate;
+                break;
+            }
+        }
+
+        for (RemoteClient *expired_client : expired)
+        {
+            DestroyPooledClient(expired_client);
+        }
+
+        if (client == nullptr)
+        {
+            // Connecting can block, so never do it while holding the pool mutex.
+            client = CreatePooledClient(host_info);
+            if (client == nullptr)
+            {
+                return nullptr;
+            }
+
+            std::lock_guard<std::mutex> lock(client_pool_mutex);
+            client_pool_key[client] = key;
+        }
+
+        // The FTP transfer callback lives on the control handle and survives a
+        // transfer, so reset whatever the previous user installed before the
+        // client is handed out again.
+        if (host_info.type == CLIENT_TYPE_FTP)
+        {
+            FtpClient *ftp_client = (FtpClient *)client;
+            ftp_client->SetCallbackXferFunction(FtpCallback);
+            ftp_client->SetCallbackArg(nullptr);
+            ftp_client->SetCallbackBytes(0);
+        }
+
+        return client;
+    }
+
+    static void ReleasePooledClient(RemoteClient *client, bool reusable)
+    {
+        bool pooled = false;
+
+        {
+            std::lock_guard<std::mutex> lock(client_pool_mutex);
+
+            auto key = client_pool_key.find(client);
+            if (key != client_pool_key.end() && reusable && ClientIsConnected(client))
+            {
+                std::vector<RemoteClient *> &idle = client_pool_idle[key->second];
+                if (idle.size() < CLIENT_POOL_MAX_IDLE)
+                {
+                    idle.push_back(client);
+                    client_pool_idle_since[client] = time(NULL);
+                    pooled = true;
+                }
+            }
+
+            if (!pooled)
+            {
+                client_pool_key.erase(client);
+            }
+        }
+
+        if (!pooled)
+        {
+            DestroyPooledClient(client);
+        }
+    }
+
+    void ClearClientPool()
+    {
+        std::vector<RemoteClient *> clients;
+
+        {
+            std::lock_guard<std::mutex> lock(client_pool_mutex);
+
+            for (auto &entry : client_pool_idle)
+            {
+                for (RemoteClient *client : entry.second)
+                {
+                    clients.push_back(client);
+                }
+            }
+
+            // Clients still checked out are not destroyed here. Their key is
+            // dropped, so they get destroyed when they are released.
+            client_pool_idle.clear();
+            client_pool_key.clear();
+            client_pool_idle_since.clear();
+        }
+
+        for (RemoteClient *client : clients)
+        {
+            DestroyPooledClient(client);
+        }
+    }
+
     static RemoteClient *GetRemoteClient(HostInfo *host_info)
     {
-        RemoteClient *tmp_client = nullptr;
-
         if (host_info->client != nullptr)
         {
             return host_info->client;
         }
-        else if (host_info->type == CLIENT_TYPE_HTTP_SERVER)
+
+        if (IsPooledClientType(host_info->type))
+        {
+            // Pooled clients are already connected and are owned exclusively
+            // by the calling thread until they are released.
+            return AcquireRemoteClient(*host_info);
+        }
+
+        RemoteClient *tmp_client = nullptr;
+
+        if (host_info->type == CLIENT_TYPE_HTTP_SERVER)
         {
             if (host_info->http_server_type.compare(HTTP_SERVER_ARCHIVEORG) == 0)
             {
@@ -152,24 +373,6 @@ namespace HttpServer
         {
             tmp_client = new BaseClient();
         }
-        else if (host_info->type == CLIENT_TYPE_SMB)
-        {
-            tmp_client = new SmbClient();
-        }
-        else if (host_info->type == CLIENT_TYPE_SFTP)
-        {
-            tmp_client = new SFTPClient();
-        }
-        else if (host_info->type == CLIENT_TYPE_NFS)
-        {
-            tmp_client = new NfsClient();
-        }
-        else if (host_info->type == CLIENT_TYPE_FTP)
-        {
-            tmp_client = new FtpClient();
-            FtpClient *ftp_client = (FtpClient*) tmp_client;
-            ftp_client->SetCallbackXferFunction(FtpCallback);
-        }
 
         if (tmp_client != nullptr)
         {
@@ -185,8 +388,24 @@ namespace HttpServer
         return tmp_client;
     }
 
-    static void DeleteRemoteClient(RemoteClient *tmp_client)
+    // Returns a client to the pool. "reusable" says whether the last operation
+    // on it succeeded; a client that failed is never handed out again.
+    static void ReleaseRemoteClient(RemoteClient *tmp_client, bool reusable)
     {
+        if (tmp_client == nullptr)
+        {
+            return;
+        }
+
+        if (dynamic_cast<SmbClient *>(tmp_client) != nullptr ||
+            dynamic_cast<SFTPClient *>(tmp_client) != nullptr ||
+            dynamic_cast<NfsClient *>(tmp_client) != nullptr ||
+            dynamic_cast<FtpClient *>(tmp_client) != nullptr)
+        {
+            ReleasePooledClient(tmp_client, reusable);
+            return;
+        }
+
         if (!dynamic_cast<ArchiveOrgClient*>(tmp_client))
         {
             tmp_client->Quit();
@@ -248,7 +467,7 @@ namespace HttpServer
                             bg_download_list[i].state = STATE_FAILED;
                             Util::RichNotify(bg_download_list[i].id, "Failed to download %s", bg_download_list[i].dest_path.c_str());
                         }
-                        DeleteRemoteClient(tmp_client);
+                        ReleaseRemoteClient(tmp_client, false);
                         sleep(5);
                         break;
                     }
@@ -260,7 +479,7 @@ namespace HttpServer
                     }
                     CONFIG::SaveBgDownloadData();
 
-                    DeleteRemoteClient(tmp_client);
+                    ReleaseRemoteClient(tmp_client, true);
                 }
                 else if (bg_download_list[i].state == STATE_DOWNLOADING || (bg_download_list[i].state == STATE_FAILED && bg_download_list[i].failed_attempts < 5))
                 {
@@ -309,7 +528,7 @@ namespace HttpServer
                                 CONFIG::SaveBgDownloadData();
                             }
                         }
-                        DeleteRemoteClient(tmp_client);
+                        ReleaseRemoteClient(tmp_client, false);
                         sleep(bg_download_list[i].failed_attempts * 5);
                         break;
                     }
@@ -321,7 +540,7 @@ namespace HttpServer
                     }
                     CONFIG::SaveBgDownloadData();
 
-                    DeleteRemoteClient(tmp_client);
+                    ReleaseRemoteClient(tmp_client, true);
                 }
             }
 
@@ -420,7 +639,7 @@ namespace HttpServer
                     return (ret==1);
                 },
                 [tmp_client](bool success) {
-                    DeleteRemoteClient(tmp_client);
+                    ReleaseRemoteClient(tmp_client, success);
                 });
 
         });

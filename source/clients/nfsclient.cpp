@@ -148,12 +148,18 @@ int NfsClient::Get(const std::string &outputfile, const std::string &ppath, uint
 
 
 
+bool NfsClient::IsConnected() const
+{
+	return nfs != nullptr && connected;
+}
+
 int NfsClient::GetRange(const std::string &path, DataSink &sink, uint64_t size, uint64_t offset)
 {
 	struct nfsfh *nfsfh = nullptr;
 	int ret = nfs_open(nfs, path.c_str(), 0400, &nfsfh);
 	if (ret != 0)
 	{
+		sprintf(response, "%s", nfs_get_error(nfs));
 		return 0;
 	}
 
@@ -167,34 +173,51 @@ int NfsClient::GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offset
 {
 	struct nfsfh *nfsfh = (struct nfsfh *)fp;
 
-	int ret = nfs_lseek(nfs, nfsfh, offset, SEEK_SET, NULL);
-	if (ret != 0)
+	if (nfs_lseek(nfs, nfsfh, offset, SEEK_SET, NULL) != 0)
 	{
+		sprintf(response, "%s", nfs_get_error(nfs));
 		return 0;
 	}
 
 	void *buff = malloc(BUF_SIZE);
-	int count = 0;
+	if (buff == nullptr)
+	{
+		sprintf(response, "Failed to allocate %u bytes", BUF_SIZE);
+		return 0;
+	}
+
 	size_t bytes_remaining = size;
-	do
+	while (bytes_remaining > 0)
 	{
 		size_t bytes_to_read = std::min<size_t>(BUF_SIZE, bytes_remaining);
-		count = nfs_read(nfs, nfsfh, bytes_to_read, buff);
-		if (count > 0)
+		int count = nfs_read(nfs, nfsfh, bytes_to_read, buff);
+
+		if (count < 0)
 		{
-			bytes_remaining -= count;
-			bool ok = sink.write((char *)buff, count);
-			if (!ok)
-			{
-				free((void *)buff);
-				return 0;
-			}
+			sprintf(response, "%s", nfs_get_error(nfs));
+			free((void *)buff);
+			return 0;
 		}
-		else
+
+		if (count == 0)
 		{
-			break;
+			// The file ended before the requested range was satisfied. Report
+			// an error, otherwise the caller would re-request the same offset
+			// forever.
+			snprintf(response, sizeof(response), "Unexpected end of file at offset %" PRIu64,
+			         offset + (size - bytes_remaining));
+			free((void *)buff);
+			return 0;
 		}
-	} while (1);
+
+		bytes_remaining -= count;
+
+		if (!sink.write((char *)buff, count))
+		{
+			free((void *)buff);
+			return 0;
+		}
+	}
 
 	free((void *)buff);
 	return 1;

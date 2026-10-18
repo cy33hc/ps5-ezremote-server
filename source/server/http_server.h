@@ -18,6 +18,7 @@ namespace HttpServer
     void PauseDownloadThread();
     void ResumeDownloadThread();
     bool IsStarted();
+    void ClearClientPool();
 }
 
 #endif

@@ -93,7 +93,7 @@ public:
 	bool Noop();
 	bool Ping();
 	bool FileExists(const std::string &path);
-	bool IsConnected();
+	bool IsConnected() const;
 	char *LastResponse();
 	long GetIdleTime();
 	int Quit();

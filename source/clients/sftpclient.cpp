@@ -4,6 +4,8 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <time.h>
+#include <stdio.h>
+#include <inttypes.h>
 #include "sceSystemService.h"
 #include "clients/remote_client.h"
 #include "clients/sftpclient.h"
@@ -255,6 +257,11 @@ int SFTPClient::GetRange(const std::string &path, DataSink &sink, uint64_t size,
     return ret;
 }
 
+bool SFTPClient::IsConnected() const
+{
+    return session != nullptr && sftp_session != nullptr;
+}
+
 int SFTPClient::GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offset)
 {
     LIBSSH2_SFTP_HANDLE *sftp_handle = (LIBSSH2_SFTP_HANDLE *)fp;
@@ -262,27 +269,44 @@ int SFTPClient::GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offse
     libssh2_sftp_seek64(sftp_handle, offset);
 
     char *buff = (char *)malloc(FTP_CLIENT_BUFSIZ);
-    int rc, count = 0;
+    if (buff == nullptr)
+    {
+        sprintf(response, "Failed to allocate %u bytes", FTP_CLIENT_BUFSIZ);
+        return 0;
+    }
+
     size_t bytes_remaining = size;
-    do
+    while (bytes_remaining > 0)
     {
         size_t bytes_to_read = std::min<size_t>(FTP_CLIENT_BUFSIZ, bytes_remaining);
-        rc = libssh2_sftp_read(sftp_handle, buff, bytes_to_read);
-        if (rc > 0)
+        int rc = libssh2_sftp_read(sftp_handle, buff, bytes_to_read);
+
+        if (rc < 0)
         {
-            bytes_remaining -= rc;
-            bool ok = sink.write(buff, rc);
-            if (!ok)
-            {
-                free((char *)buff);
-                return 0;
-            }
+            sprintf(response, "SFTP read failed: %d", rc);
+            free((char *)buff);
+            return 0;
         }
-        else
+
+        if (rc == 0)
         {
-            break;
+            // The file ended before the requested range was satisfied. Report
+            // an error, otherwise the caller would re-request the same offset
+            // forever.
+            snprintf(response, sizeof(response), "Unexpected end of file at offset %" PRIu64,
+                     offset + (size - bytes_remaining));
+            free((char *)buff);
+            return 0;
         }
-    } while (1);
+
+        bytes_remaining -= rc;
+
+        if (!sink.write(buff, rc))
+        {
+            free((char *)buff);
+            return 0;
+        }
+    }
 
     free((char *)buff);
 

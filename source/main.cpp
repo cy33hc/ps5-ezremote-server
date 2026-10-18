@@ -77,6 +77,7 @@ int main(int argc, char *argv[])
     HttpServer::StartDownloadThread();
     HttpServer::Start();
     HttpServer::StopDownloadThread();
+    HttpServer::ClearClientPool();
     stop_monitoring = true;
     Util::Notify("ezRemote Server stopped.");
 

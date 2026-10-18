@@ -96,14 +96,14 @@ namespace FS
 
     FILE *Create(const std::string &path)
     {
-        FILE *fd = fopen(path.c_str(), "w");
+        FILE *fd = fopen(path.c_str(), "wb");
 
         return fd;
     }
 
     FILE *OpenRW(const std::string &path)
     {
-        FILE *fd = fopen(path.c_str(), "w+");
+        FILE *fd = fopen(path.c_str(), "w+b");
         return fd;
     }
 
@@ -224,7 +224,7 @@ namespace FS
 
     bool Save(const std::string &path, const void *data, uint32_t size)
     {
-        FILE *fd = fopen(path.c_str(), "w+");
+        FILE *fd = fopen(path.c_str(), "w+b");
         if (fd == nullptr)
             return false;
 
