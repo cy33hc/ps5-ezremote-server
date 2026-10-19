@@ -212,12 +212,16 @@ namespace HttpServer
         delete client;
     }
 
-    static RemoteClient *AcquireRemoteClient(const HostInfo &host_info)
+    // "reusable" says whether the returned client may be kept in the pool and
+    // handed out to another request after it is released. When it is false a
+    // fresh connection is created and it is destroyed on release.
+    static RemoteClient *AcquireRemoteClient(const HostInfo &host_info, bool reusable)
     {
         const std::string key = ClientPoolKey(host_info);
         std::vector<RemoteClient *> expired;
         RemoteClient *client = nullptr;
 
+        if (reusable)
         {
             std::lock_guard<std::mutex> lock(client_pool_mutex);
 
@@ -260,8 +264,11 @@ namespace HttpServer
                 return nullptr;
             }
 
-            std::lock_guard<std::mutex> lock(client_pool_mutex);
-            client_pool_key[client] = key;
+            if (reusable)
+            {
+                std::lock_guard<std::mutex> lock(client_pool_mutex);
+                client_pool_key[client] = key;
+            }
         }
 
         // The FTP transfer callback lives on the control handle and survives a
@@ -278,7 +285,7 @@ namespace HttpServer
         return client;
     }
 
-    static void ReleasePooledClient(RemoteClient *client, bool reusable)
+    static void ReleasePooledClient(RemoteClient *client, bool success)
     {
         bool pooled = false;
 
@@ -286,7 +293,7 @@ namespace HttpServer
             std::lock_guard<std::mutex> lock(client_pool_mutex);
 
             auto key = client_pool_key.find(client);
-            if (key != client_pool_key.end() && reusable && ClientIsConnected(client))
+            if (key != client_pool_key.end() && success && ClientIsConnected(client))
             {
                 std::vector<RemoteClient *> &idle = client_pool_idle[key->second];
                 if (idle.size() < CLIENT_POOL_MAX_IDLE)
@@ -337,7 +344,7 @@ namespace HttpServer
         }
     }
 
-    static RemoteClient *GetRemoteClient(HostInfo *host_info)
+    static RemoteClient *GetRemoteClient(HostInfo *host_info, bool reusable)
     {
         if (host_info->client != nullptr)
         {
@@ -348,7 +355,7 @@ namespace HttpServer
         {
             // Pooled clients are already connected and are owned exclusively
             // by the calling thread until they are released.
-            return AcquireRemoteClient(*host_info);
+            return AcquireRemoteClient(*host_info, reusable);
         }
 
         RemoteClient *tmp_client = nullptr;
@@ -388,9 +395,10 @@ namespace HttpServer
         return tmp_client;
     }
 
-    // Returns a client to the pool. "reusable" says whether the last operation
-    // on it succeeded; a client that failed is never handed out again.
-    static void ReleaseRemoteClient(RemoteClient *tmp_client, bool reusable)
+    // Returns a client to the pool. "success" says whether the last operation
+    // on it succeeded; a client that failed is never handed out again. Clients
+    // that were not acquired as reusable are not in the pool and get destroyed.
+    static void ReleaseRemoteClient(RemoteClient *tmp_client, bool success)
     {
         if (tmp_client == nullptr)
         {
@@ -402,7 +410,7 @@ namespace HttpServer
             dynamic_cast<NfsClient *>(tmp_client) != nullptr ||
             dynamic_cast<FtpClient *>(tmp_client) != nullptr)
         {
-            ReleasePooledClient(tmp_client, reusable);
+            ReleasePooledClient(tmp_client, success);
             return;
         }
 
@@ -436,7 +444,9 @@ namespace HttpServer
             {
                 if (bg_download_list[i].state == STATE_PENDING)
                 {
-                    RemoteClient *tmp_client = GetRemoteClient(&(bg_download_list[i].host_info));
+                    // A background download owns its client for the whole file,
+                    // so it gets a dedicated connection instead of a pooled one.
+                    RemoteClient *tmp_client = GetRemoteClient(&(bg_download_list[i].host_info), false);
                     if (tmp_client == nullptr)
                     {
                         continue;;
@@ -467,7 +477,7 @@ namespace HttpServer
                             bg_download_list[i].state = STATE_FAILED;
                             Util::RichNotify(bg_download_list[i].id, "Failed to download %s", bg_download_list[i].dest_path.c_str());
                         }
-                        ReleaseRemoteClient(tmp_client, false);
+                        ReleaseRemoteClient(tmp_client, true);
                         sleep(5);
                         break;
                     }
@@ -484,7 +494,9 @@ namespace HttpServer
                 else if (bg_download_list[i].state == STATE_DOWNLOADING || (bg_download_list[i].state == STATE_FAILED && bg_download_list[i].failed_attempts < 5))
                 {
                     // Resume interrupted download
-                    RemoteClient *tmp_client = GetRemoteClient(&(bg_download_list[i].host_info));
+                    // A background download owns its client for the whole file,
+                    // so it gets a dedicated connection instead of a pooled one.
+                    RemoteClient *tmp_client = GetRemoteClient(&(bg_download_list[i].host_info), false);
                     if (tmp_client == nullptr)
                     {
                         continue;
@@ -528,7 +540,7 @@ namespace HttpServer
                                 CONFIG::SaveBgDownloadData();
                             }
                         }
-                        ReleaseRemoteClient(tmp_client, false);
+                        ReleaseRemoteClient(tmp_client, true);
                         sleep(bg_download_list[i].failed_attempts * 5);
                         break;
                     }
@@ -620,7 +632,7 @@ namespace HttpServer
                 return;
             }
 
-            tmp_client = GetRemoteClient(&(pkg_host_data->host_info));
+            tmp_client = GetRemoteClient(&(pkg_host_data->host_info), true);
             if (tmp_client == nullptr)
             {
                 res.status = 500;
