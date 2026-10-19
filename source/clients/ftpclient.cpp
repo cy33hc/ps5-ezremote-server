@@ -1310,7 +1310,7 @@ int FtpClient::GetRange(const std::string &path, void *buffer, uint64_t size, ui
 		return 0;
 	}
 
-	char buf[8192];
+	char *buf = (char*) malloc(8192);
 	int l = 0;
 	uint64_t remaining = size;
 	char *p = (char *)buffer;
@@ -1328,7 +1328,9 @@ int FtpClient::GetRange(const std::string &path, void *buffer, uint64_t size, ui
 		}
 		remaining -= l;
 	}
+
 	FtpClose(nData);
+	free(buf);
 	mp_ftphandle->offset = 0;
 
 	return 1;
