@@ -42,6 +42,7 @@ static void *SystemEventThread(void *argp)
                 if (in_rest_mode)
                 {
                     in_rest_mode = false;
+                    HttpServer::ClearClientPool();
                     HttpServer::ResumeDownloadThread();
                     Util::Notify("ezRemote: Resuming downloads");
                 }
