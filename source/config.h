@@ -3,9 +3,11 @@
 
 #include <string>
 #include <vector>
+#include <deque>
 #include <string>
 #include <algorithm>
 #include <map>
+#include <memory>
 #include <set>
 
 #include "clients/remote_client.h"
@@ -62,11 +64,11 @@ struct BgDownloadData {
 };
 
 extern uint64_t *g_bytes_transfered;
-extern std::vector<BgDownloadData> bg_download_list;
+extern std::deque<BgDownloadData> bg_download_list;
 
 namespace CONFIG
 {
-    PackageInstallData* GetPackageInstallHostData(const std::string &hash);
+    std::shared_ptr<PackageInstallData> GetPackageInstallHostData(const std::string &hash);
     void AddPackageInstallHostData(const std::string &hash, PackageInstallData pkg_data);
     void RemovePackageInstallHostData(const std::string &hash);
     void LoadPackageInstallHostData();

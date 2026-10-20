@@ -4,6 +4,7 @@
 #include <cstring>
 #include <map>
 #include <vector>
+#include <deque>
 #include <regex>
 #include <shared_mutex>
 #include <stdlib.h>
@@ -15,8 +16,8 @@
 #include "base64.h"
 #include "util.h"
 
-static std::map<std::string, PackageInstallData> pkg_download_history;
-std::vector<BgDownloadData> bg_download_list;
+static std::map<std::string, std::shared_ptr<PackageInstallData>> pkg_install_history;
+std::deque<BgDownloadData> bg_download_list;
 
 unsigned char cipher_key[32] = {'s', '5', 'v', '8', 'y', '/', 'B', '?', 'E', '(', 'H', '+', 'M', 'b', 'Q', 'e', 'T', 'h', 'W', 'm', 'Z', 'q', '4', 't', '7', 'w', '9', 'z', '$', 'C', '&', 'F'};
 unsigned char cipher_iv[16] = {'Y', 'p', '3', 's', '6', 'v', '9', 'y', '$', 'B', '&', 'E', ')', 'H', '@', 'M'};
@@ -64,25 +65,25 @@ namespace CONFIG
         return 1;
     }
 
-	PackageInstallData* GetPackageInstallHostData(const std::string &hash)
+	std::shared_ptr<PackageInstallData> GetPackageInstallHostData(const std::string &hash)
 	{
-        if (pkg_download_history.find(hash) != pkg_download_history.end())
-		    return &pkg_download_history[hash];
-        return nullptr;
+        std::shared_lock<std::shared_mutex> lock(pkg_mutex_);
+        auto it = pkg_install_history.find(hash);
+        if (it == pkg_install_history.end())
+            return nullptr;
+        return it->second;
 	}
 
 	void AddPackageInstallHostData(const std::string &hash, PackageInstallData pkg_data)
 	{
 		std::unique_lock<std::shared_mutex> lock(pkg_mutex_);
-		std::pair<std::string, PackageInstallData> pair = std::make_pair(hash, pkg_data);
-		pkg_download_history.erase(hash);
-		pkg_download_history.insert(pair);
+		pkg_install_history[hash] = std::make_shared<PackageInstallData>(pkg_data);
 	}
 
 	void RemovePackageInstallHostData(const std::string &hash)
 	{
 		std::unique_lock<std::shared_mutex> lock(pkg_mutex_);
-		pkg_download_history.erase(hash);
+		pkg_install_history.erase(hash);
 	}
 
     void LoadPackageInstallHostData()
@@ -142,27 +143,27 @@ namespace CONFIG
         json_object *history_list = json_object_new_array();
         uint64_t current_time = Util::GetTick();
 
-        for (auto it = pkg_download_history.begin(); it != pkg_download_history.end();)
+        for (auto it = pkg_install_history.begin(); it != pkg_install_history.end();)
         {
-            if (current_time - it->second.timestamp < MAX_PKG_HISTORY_RETENTION)
+            if (current_time - it->second->timestamp < MAX_PKG_HISTORY_RETENTION)
             {
                 json_object *history_item_obj = json_object_new_object();
                 json_object_object_add(history_item_obj, "hash", json_object_new_string(it->first.c_str()));
-                json_object_object_add(history_item_obj, "url", json_object_new_string(it->second.host_info.url.c_str()));
-                json_object_object_add(history_item_obj, "path", json_object_new_string(it->second.path.c_str()));
-                json_object_object_add(history_item_obj, "username", json_object_new_string(it->second.host_info.username.c_str()));
-                json_object_object_add(history_item_obj, "type", json_object_new_int(it->second.host_info.type));
-                json_object_object_add(history_item_obj, "timestamp", json_object_new_uint64(it->second.timestamp));
-                json_object_object_add(history_item_obj, "file_size", json_object_new_uint64(it->second.size));
-                if (it->second.host_info.type == CLIENT_TYPE_HTTP_SERVER)
+                json_object_object_add(history_item_obj, "url", json_object_new_string(it->second->host_info.url.c_str()));
+                json_object_object_add(history_item_obj, "path", json_object_new_string(it->second->path.c_str()));
+                json_object_object_add(history_item_obj, "username", json_object_new_string(it->second->host_info.username.c_str()));
+                json_object_object_add(history_item_obj, "type", json_object_new_int(it->second->host_info.type));
+                json_object_object_add(history_item_obj, "timestamp", json_object_new_uint64(it->second->timestamp));
+                json_object_object_add(history_item_obj, "file_size", json_object_new_uint64(it->second->size));
+                if (it->second->host_info.type == CLIENT_TYPE_HTTP_SERVER)
                 {
-                    json_object_object_add(history_item_obj, "http_server_type", json_object_new_string(it->second.host_info.http_server_type.c_str()));
+                    json_object_object_add(history_item_obj, "http_server_type", json_object_new_string(it->second->host_info.http_server_type.c_str()));
                 }
 
                 std::string encrypted_password;
-                if (!it->second.host_info.password.empty())
+                if (!it->second->host_info.password.empty())
                 {
-                    Encrypt(it->second.host_info.password, encrypted_password);
+                    Encrypt(it->second->host_info.password, encrypted_password);
                 }
                 json_object_object_add(history_item_obj, "password", json_object_new_string(encrypted_password.c_str()));
 
@@ -171,13 +172,13 @@ namespace CONFIG
             }
             else
             {
-                if (it->second.host_info.client != nullptr)
+                if (it->second->host_info.client != nullptr)
                 {
-                    delete it->second.host_info.client;
-                    it->second.host_info.client = nullptr;
+                    delete it->second->host_info.client;
+                    it->second->host_info.client = nullptr;
                 }
 
-                it = pkg_download_history.erase(it);
+                it = pkg_install_history.erase(it);
             }
         }
         

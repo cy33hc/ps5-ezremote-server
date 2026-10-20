@@ -128,7 +128,7 @@ namespace HttpServer
         return;
     }
 
-    static const size_t CLIENT_POOL_MAX_IDLE = 4;
+    static const size_t CLIENT_POOL_MAX_IDLE = 12;
     static const time_t CLIENT_POOL_MAX_IDLE_SECONDS = 300;
 
     static std::mutex client_pool_mutex;
@@ -623,7 +623,9 @@ namespace HttpServer
         svr->Get("/bg_install/(.*)", [&](const Request &req, Response &res)
         {
             std::string hash = req.matches[1];
-            PackageInstallData* pkg_host_data = CONFIG::GetPackageInstallHostData(hash);
+            // Holds a reference to the entry for the whole request, so a
+            // concurrent /store_bg_install_data cannot free it under us.
+            std::shared_ptr<PackageInstallData> pkg_host_data = CONFIG::GetPackageInstallHostData(hash);
             RemoteClient *tmp_client;
 
             if (pkg_host_data == nullptr)
