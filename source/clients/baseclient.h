@@ -20,12 +20,13 @@ public:
     std::string GetFullPath(std::string path1);
     const char *LastResponse();
     int Quit();
+    bool IsConnected() const;
     void SetClientPathEncoding(bool enabled);
 
 protected:
     int SetCookies(httplib::Headers &headers);
 
-    httplib::Client *client;
+    httplib::Client *client = nullptr;
     std::string base_path;
     std::string host_url;
     char response[512];

@@ -51,6 +51,14 @@ int BaseClient::Connect(const std::string &url, const std::string &username, con
         this->base_path = url.substr(root_pos);
     }
 
+    // A client can be connected more than once if it is pooled and re-targeted,
+    // so drop the previous handle instead of leaking it.
+    if (client != nullptr)
+    {
+        delete client;
+        client = nullptr;
+    }
+
     client = new httplib::Client(this->host_url);
     if (username.length() > 0)
         client->set_basic_auth(username, password);
@@ -164,7 +172,16 @@ int BaseClient::Quit()
         delete client;
         client = nullptr;
     }
+    this->connected = false;
     return 1;
+}
+
+bool BaseClient::IsConnected() const
+{
+    // httplib re-establishes a dropped keep-alive socket on the next request, so
+    // having a live Client handle is what this can cheaply verify. A transfer
+    // that actually fails is reported through "success" when it is released.
+    return this->connected && this->client != nullptr;
 }
 
 void BaseClient::SetClientPathEncoding(bool enabled)

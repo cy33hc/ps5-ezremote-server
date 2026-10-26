@@ -113,7 +113,6 @@ namespace CONFIG
                 history_item.host_info.type = json_object_get_int(json_object_object_get(history_item_obj, "type"));
                 history_item.timestamp = json_object_get_uint64(json_object_object_get(history_item_obj, "timestamp"));
                 history_item.size = json_object_get_uint64(json_object_object_get(history_item_obj, "file_size"));
-                history_item.host_info.client = nullptr;
 
                 if (history_item.host_info.type == CLIENT_TYPE_HTTP_SERVER)
 		        {
@@ -172,12 +171,6 @@ namespace CONFIG
             }
             else
             {
-                if (it->second->host_info.client != nullptr)
-                {
-                    delete it->second->host_info.client;
-                    it->second->host_info.client = nullptr;
-                }
-
                 it = pkg_install_history.erase(it);
             }
         }
@@ -215,7 +208,6 @@ namespace CONFIG
                 history_item.host_info.url = JsonGetString(history_item_obj, "url");
                 history_item.host_info.username = JsonGetString(history_item_obj, "username");
                 std::string encrypted_password = JsonGetString(history_item_obj, "password");
-                history_item.host_info.client = nullptr;
 
                 if (history_item.host_info.type == CLIENT_TYPE_HTTP_SERVER)
 		        {

@@ -262,6 +262,11 @@ bool SFTPClient::IsConnected() const
     return session != nullptr && sftp_session != nullptr;
 }
 
+uint32_t SFTPClient::GetMaxIdleTimeout() const
+{
+    return 4 * 60;
+}
+
 int SFTPClient::GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offset)
 {
     LIBSSH2_SFTP_HANDLE *sftp_handle = (LIBSSH2_SFTP_HANDLE *)fp;

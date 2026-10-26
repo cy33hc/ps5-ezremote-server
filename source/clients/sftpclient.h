@@ -18,6 +18,7 @@ public:
     int GetRange(void *fp, DataSink &sink, uint64_t size, uint64_t offset);
     const char *LastResponse();
     bool IsConnected() const;
+    uint32_t GetMaxIdleTimeout() const override;
     int Quit();
 
 protected:

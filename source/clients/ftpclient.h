@@ -90,10 +90,12 @@ public:
 	void SetCallbackXferFunction(FtpCallbackXfer pointer);
 	void SetCallbackArg(void *arg);
 	void SetCallbackBytes(int64_t bytes);
+	void ResetTransferState();
 	bool Noop();
 	bool Ping();
 	bool FileExists(const std::string &path);
 	bool IsConnected() const;
+	uint32_t GetMaxIdleTimeout() const override;
 	char *LastResponse();
 	long GetIdleTime();
 	int Quit();
