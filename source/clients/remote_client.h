@@ -32,7 +32,7 @@ public:
     virtual int Quit() = 0;
     virtual bool IsConnected() const = 0;
     virtual void ResetTransferState() {}
-    virtual uint32_t GetMaxIdleTimeout() const { return 7 * 24 * 60 * 60; }
+    virtual uint32_t GetMaxIdleTimeout() const { return 5 * 60; }
 };
 
 #endif

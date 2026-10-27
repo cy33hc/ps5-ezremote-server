@@ -1396,11 +1396,6 @@ void FtpClient::ResetTransferState()
 	mp_ftphandle->cbbytes = 0;
 }
 
-uint32_t FtpClient::GetMaxIdleTimeout() const
-{
-	return 4 * 60;
-}
-
 long FtpClient::GetIdleTime()
 {
 	timeval now;

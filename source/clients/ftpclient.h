@@ -95,7 +95,6 @@ public:
 	bool Ping();
 	bool FileExists(const std::string &path);
 	bool IsConnected() const;
-	uint32_t GetMaxIdleTimeout() const override;
 	char *LastResponse();
 	long GetIdleTime();
 	int Quit();

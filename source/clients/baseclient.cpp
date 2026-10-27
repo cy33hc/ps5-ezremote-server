@@ -191,3 +191,8 @@ void BaseClient::SetClientPathEncoding(bool enabled)
         this->client->set_url_encode(enabled);
     }
 }
+
+uint32_t BaseClient::GetMaxIdleTimeout() const
+{
+	return 7 * 24 * 60 * 60;
+}
