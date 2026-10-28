@@ -22,7 +22,7 @@ public:
     int Quit();
     bool IsConnected() const;
     void SetClientPathEncoding(bool enabled);
-	uint32_t GetMaxIdleTimeout() const override;
+    uint32_t GetMaxIdleTimeout() const override;
 
 protected:
     int SetCookies(httplib::Headers &headers);

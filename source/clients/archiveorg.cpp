@@ -38,6 +38,7 @@ std::string ArchiveOrgClient::GenerateRandomId(const int len)
 int ArchiveOrgClient::Connect(const std::string &url, const std::string &username, const std::string &password)
 {
     std::lock_guard<std::mutex> lock(mtx);
+
     if (this->connected)
         return 1;
 
