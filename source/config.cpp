@@ -12,6 +12,7 @@
 #include "server/http_server.h"
 #include "config.h"
 #include "fs.h"
+#include "json_object_ref.h"
 #include "crypt.h"
 #include "base64.h"
 #include "util.h"
@@ -25,12 +26,6 @@ unsigned char cipher_iv[16] = {'Y', 'p', '3', 's', '6', 'v', '9', 'y', '$', 'B',
 std::shared_mutex pkg_mutex_;
 std::shared_mutex download_mutex_;
 uint64_t *g_bytes_transfered;
-
-static std::string JsonGetString(json_object *obj, const char *key, const std::string &default_value = "")
-{
-    const char *value = json_object_get_string(json_object_object_get(obj, key));
-    return value != nullptr ? std::string(value) : default_value;
-}
 
 namespace CONFIG
 {
@@ -93,10 +88,11 @@ namespace CONFIG
             json_object *jobj = json_object_from_file(PKG_INSTALL_HISTORY_PATH);
             if (jobj == nullptr)
                 return;
+            
+            JsonObjectRef jobj_ref(jobj);
             struct array_list *history_list = json_object_get_array(jobj);
             if (history_list == nullptr)
             {
-                json_object_put(jobj);
                 return;
             }
 
@@ -126,7 +122,6 @@ namespace CONFIG
                 }
                 AddPackageInstallHostData(hash, history_item);
             }
-            json_object_put(jobj);
         }
     }
 
@@ -140,6 +135,7 @@ namespace CONFIG
         }
 
         json_object *history_list = json_object_new_array();
+        JsonObjectRef jobj_ref(history_list);
         uint64_t current_time = Util::GetTick();
 
         for (auto it = pkg_install_history.begin(); it != pkg_install_history.end();)
@@ -176,7 +172,6 @@ namespace CONFIG
         }
         
         json_object_to_file(PKG_INSTALL_HISTORY_PATH, history_list);
-        json_object_put(history_list);
     }
 
 	void AddBgDownloadData(BgDownloadData pkg_data)
@@ -192,10 +187,11 @@ namespace CONFIG
             json_object *jobj = json_object_from_file(BG_DOWNLOAD_HISTORY_PATH);
             if (jobj == nullptr)
                 return;
+            
+            JsonObjectRef jobj_ref(jobj);
             struct array_list *history_list = json_object_get_array(jobj);
             if (history_list == nullptr)
             {
-                json_object_put(jobj);
                 return;
             }
 
@@ -231,7 +227,6 @@ namespace CONFIG
 
                 AddBgDownloadData(history_item);
             }
-            json_object_put(jobj);
         }
     }
 
@@ -245,6 +240,7 @@ namespace CONFIG
         }
 
         json_object *history_list = json_object_new_array();
+        JsonObjectRef jobj_ref(history_list);
         uint64_t current_time = Util::GetTick();
 
         for (auto it = bg_download_list.begin(); it != bg_download_list.end(); ++it)
@@ -281,6 +277,5 @@ namespace CONFIG
         }
         
         json_object_to_file(BG_DOWNLOAD_HISTORY_PATH, history_list);
-        json_object_put(history_list);
     }
 }

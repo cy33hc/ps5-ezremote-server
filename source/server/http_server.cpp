@@ -17,6 +17,7 @@
 #include "clients/webdav.h"
 #include "config.h"
 #include "fs.h"
+#include "json_object_ref.h"
 #include "util.h"
 
 #define SUCCESS_MSG "{ \"result\": { \"success\": true, \"error\": null } }"
@@ -492,50 +493,32 @@ namespace HttpServer
         svr->Post("/store_bg_install_data", [&](const Request &req, Response &res)
         {
             const char *hash_param;
-            const char *path_param;
-            const char *url_param;
-            const char *username_param;
-            const char *password_param;
-            const char *http_server_type_param;
-            int type_param;
-            uint64_t file_size;
 
             json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
+
             if (jobj != nullptr)
             {
-                hash_param = json_object_get_string(json_object_object_get(jobj, "hash"));
-                url_param = json_object_get_string(json_object_object_get(jobj, "url"));
-                path_param = json_object_get_string(json_object_object_get(jobj, "path"));
-                username_param  = json_object_get_string(json_object_object_get(jobj, "username"));
-                password_param = json_object_get_string(json_object_object_get(jobj, "password"));
-                http_server_type_param = json_object_get_string(json_object_object_get(jobj, "http_server_type"));
-                type_param = json_object_get_int(json_object_object_get(jobj, "type"));
-                file_size = json_object_get_uint64(json_object_object_get(jobj, "file_size"));
 
-                if (url_param == nullptr || hash_param == nullptr)
+                PackageInstallData pkg_data;
+                std::string hash = JsonGetString(jobj, "hash");
+                pkg_data.host_info.url = JsonGetString(jobj, "url");
+                pkg_data.host_info.username = JsonGetString(jobj, "username");
+                pkg_data.host_info.password = JsonGetString(jobj, "password");
+                pkg_data.path = JsonGetString(jobj, "path");
+                pkg_data.host_info.http_server_type = JsonGetString(jobj, "http_server_type");
+                pkg_data.timestamp = Util::GetTick();
+                pkg_data.host_info.type = json_object_get_int(json_object_object_get(jobj, "type"));
+                pkg_data.size = json_object_get_uint64(json_object_object_get(jobj, "file_size"));
+
+                if (pkg_data.host_info.url.empty() || hash.empty())
                 {
                     bad_request(res, "Required url_param or hash parameter missing");
-                    json_object_put(jobj);
                     return;
                 }
 
-                PackageInstallData pkg_data;
-                pkg_data.host_info.url = url_param;
-                if (username_param != nullptr)
-                    pkg_data.host_info.username = username_param;
-                if (password_param != nullptr)
-                    pkg_data.host_info.password = password_param;
-                if (path_param != nullptr)
-                    pkg_data.path = path_param;
-                if (http_server_type_param != nullptr)
-                    pkg_data.host_info.http_server_type = http_server_type_param;
-                pkg_data.timestamp = Util::GetTick();
-                pkg_data.host_info.type = type_param;
-                pkg_data.size = file_size;
-
-                CONFIG::AddPackageInstallHostData(hash_param, pkg_data);
+                CONFIG::AddPackageInstallHostData(hash, pkg_data);
                 CONFIG::SavePackageInstallHostData();
-                json_object_put(jobj);
             }
         });
 
@@ -579,64 +562,42 @@ namespace HttpServer
 
         svr->Post("/download_url", [&](const Request &req, Response &res)
         {
-            int type_param;
-            const char *url_param;
-            const char *username_param;
-            const char *password_param;
-            const char *http_server_type_param;
-            const char *src_path_param;
-            const char *dest_path_param;
-            uint64_t file_size_param;
-            uint64_t id_param;
 
             json_object *jobj = json_tokener_parse(req.body.c_str());
+            JsonObjectRef jobj_ref(jobj);
+
             if (jobj != nullptr)
             {
-                type_param = json_object_get_int(json_object_object_get(jobj, "type"));
-                url_param = json_object_get_string(json_object_object_get(jobj, "url"));
-                username_param  = json_object_get_string(json_object_object_get(jobj, "username"));
-                password_param = json_object_get_string(json_object_object_get(jobj, "password"));
-                http_server_type_param = json_object_get_string(json_object_object_get(jobj, "http_server_type"));
-                src_path_param = json_object_get_string(json_object_object_get(jobj, "src_path"));
-                dest_path_param = json_object_get_string(json_object_object_get(jobj, "dest_path"));
-                file_size_param = json_object_get_uint64(json_object_object_get(jobj, "size"));
-                id_param = json_object_get_uint64(json_object_object_get(jobj, "id"));
-
-                if (url_param == nullptr || src_path_param == nullptr || dest_path_param == nullptr)
-                {
-                    bad_request(res, "Required parameters are missing");
-                    json_object_put(jobj);
-                    return;
-                }
-
                 BgDownloadData download_data;
-                download_data.host_info.type = type_param;
-                download_data.host_info.url = url_param;
-                download_data.src_path = src_path_param;
-                download_data.dest_path = dest_path_param;
-                download_data.file_size = file_size_param;
+                download_data.host_info.type = json_object_get_int(json_object_object_get(jobj, "type"));
+                download_data.host_info.url = JsonGetString(jobj, "url");
+                download_data.host_info.username = JsonGetString(jobj, "username");
+                download_data.host_info.password = JsonGetString(jobj, "password");
+                download_data.host_info.http_server_type = JsonGetString(jobj, "http_server_type");
+                download_data.src_path = JsonGetString(jobj, "src_path");
+                download_data.dest_path = JsonGetString(jobj, "dest_path");
+                download_data.file_size = json_object_get_uint64(json_object_object_get(jobj, "size"));
                 download_data.state = STATE_PENDING;
-                download_data.id = id_param;
+                download_data.id = json_object_get_uint64(json_object_object_get(jobj, "id"));
                 download_data.bytes_transfered = 0;
                 download_data.timestamp = Util::GetTick();
                 download_data.failed_attempts = 0;
 
-                if (username_param != nullptr)
-                    download_data.host_info.username = username_param;
-                if (password_param != nullptr)
-                    download_data.host_info.password = password_param;
-                if (http_server_type_param != nullptr)
-                    download_data.host_info.http_server_type = http_server_type_param;
+                if (download_data.host_info.url.empty() || download_data.src_path.empty() || download_data.dest_path.empty())
+                {
+                    bad_request(res, "Required parameters are missing");
+                    return;
+                }
 
                 CONFIG::AddBgDownloadData(download_data);
                 CONFIG::SaveBgDownloadData();
-                json_object_put(jobj);
             }
         });
 
         svr->Get("/get_download_state", [&](const Request &req, Response &res)
         {
             json_object *download_list = json_object_new_array();
+            JsonObjectRef jobj_ref(download_list);
 
             for (int i=0; i < bg_download_list.size(); i++)
             {
@@ -653,7 +614,6 @@ namespace HttpServer
 
             res.status = 200;
             res.set_content(payload_str, "application/json");
-            json_object_put(download_list);
         });
 
         svr->Get("/stop", [&](const Request & /*req*/, Response & /*res*/)
