@@ -7,6 +7,7 @@ using namespace httplib;
 extern Server *svr;
 
 extern int http_server_port;
+extern int ezremote_client_port;
 
 namespace HttpServer
 {

@@ -17,6 +17,17 @@
 #include "base64.h"
 #include "util.h"
 
+extern "C"
+{
+#include "inifile.h"
+}
+
+#define APP_ID "ezremote-client"
+#define DATA_PATH "/data/homebrew/" APP_ID
+#define CONFIG_INI_FILE DATA_PATH "/config.ini"
+#define CONFIG_HTTP_SERVER "HttpServer"
+#define CONFIG_EZREMOTE_CLIENT_PORT "http_server_port"
+
 static std::map<std::string, std::shared_ptr<PackageInstallData>> pkg_install_history;
 std::deque<BgDownloadData> bg_download_list;
 
@@ -58,6 +69,13 @@ namespace CONFIG
         decrypt_text.append(std::string((const char *)tmp_decrypt_text, decrypt_text_len));
 
         return 1;
+    }
+
+    void LoadConfig()
+    {
+        OpenIniFile(CONFIG_INI_FILE);
+        ezremote_client_port = ReadInt(CONFIG_HTTP_SERVER, CONFIG_EZREMOTE_CLIENT_PORT, 9090);
+        CloseIniFile();
     }
 
 	std::shared_ptr<PackageInstallData> GetPackageInstallHostData(const std::string &hash)

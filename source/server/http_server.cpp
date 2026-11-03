@@ -30,6 +30,7 @@ using namespace httplib;
 
 Server *svr;
 int http_server_port = 6701;
+int ezremote_client_port = 9090;
 static pthread_t bg_download_thread;
 static uint64_t g_dl_offset;
 static bool stop_download = false;
@@ -666,7 +667,7 @@ namespace HttpServer
             // Already running? Do not disturb it.
             bool started = false;
             {
-                httplib::Client check("127.0.0.1", 9090);
+                httplib::Client check("127.0.0.1", ezremote_client_port);
                 check.set_connection_timeout(1, 0);
                 check.set_read_timeout(1, 0);
                 auto result = check.Get("/version");
@@ -685,7 +686,7 @@ namespace HttpServer
             {
                 sleep(1);
 
-                httplib::Client check("127.0.0.1", 9090);
+                httplib::Client check("127.0.0.1", ezremote_client_port);
                 check.set_connection_timeout(1, 0);
                 check.set_read_timeout(1, 0);
                 auto result = check.Get("/version");
@@ -711,7 +712,7 @@ namespace HttpServer
             if (host.empty())
                 host = "127.0.0.1";
 
-            res.set_redirect("http://" + host + ":9090/index.html");
+            res.set_redirect("http://" + host + ":" + std::to_string(ezremote_client_port) + "/index.html");
         });
 
         svr->Get("/stop", [&](const Request & /*req*/, Response & /*res*/)
@@ -728,6 +729,12 @@ namespace HttpServer
             // Allows the console's web UI to probe this endpoint directly.
             res.set_header("Access-Control-Allow-Origin", "*");
             res.set_content(version, "text/plain");
+        });
+
+        svr->Post("/change_ezremote_client_port", [&](const Request & req, Response &res)
+        {
+            ezremote_client_port = std::stoi(req.body);
+            res.status = 200;
         });
 
         svr->set_error_handler([](const Request & /*req*/, Response &res)

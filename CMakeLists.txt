@@ -26,6 +26,7 @@ add_executable(${PROJECT_NAME}.elf
   source/crypt.c
   source/dbglogger.c
   source/fs.cpp
+  source/inifile.c
   source/main.cpp
 )
 

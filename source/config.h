@@ -70,6 +70,7 @@ extern std::deque<BgDownloadData> bg_download_list;
 
 namespace CONFIG
 {
+    void LoadConfig();
     std::shared_ptr<PackageInstallData> GetPackageInstallHostData(const std::string &hash);
     void AddPackageInstallHostData(const std::string &hash, PackageInstallData pkg_data);
     void RemovePackageInstallHostData(const std::string &hash);
