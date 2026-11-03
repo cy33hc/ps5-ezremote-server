@@ -60,6 +60,9 @@ struct BgDownloadData {
     uint64_t id;
     uint64_t timestamp;
     int32_t failed_attempts;
+    // Set by /clear_download_history; the download thread erases flagged rows
+    // between passes so the deque is never mutated from a request handler.
+    bool remove_requested = false;
 };
 
 extern uint64_t *g_bytes_transfered;

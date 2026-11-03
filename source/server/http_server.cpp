@@ -359,6 +359,23 @@ namespace HttpServer
             if (stop_download)
                 break;
 
+            // Apply history clears from the previous pass.
+            bool removed_any = false;
+            for (std::deque<BgDownloadData>::iterator it = bg_download_list.begin(); it != bg_download_list.end();)
+            {
+                if (it->remove_requested)
+                {
+                    it = bg_download_list.erase(it);
+                    removed_any = true;
+                }
+                else
+                {
+                    ++it;
+                }
+            }
+            if (removed_any)
+                CONFIG::SaveBgDownloadData();
+
             for (int i=0; i < bg_download_list.size(); i++)
             {
                 if (bg_download_list[i].state == STATE_PENDING)
@@ -601,6 +618,11 @@ namespace HttpServer
 
             for (int i=0; i < bg_download_list.size(); i++)
             {
+                // Cleared rows stay in the deque until the download thread's next
+                // pass; hide them immediately here.
+                if (bg_download_list[i].remove_requested)
+                    continue;
+
                 json_object *download_item_obj = json_object_new_object();
                 json_object_object_add(download_item_obj, "path", json_object_new_string(bg_download_list[i].dest_path.c_str()));
                 json_object_object_add(download_item_obj, "bytes_transfered", json_object_new_uint64(bg_download_list[i].bytes_transfered));
@@ -616,6 +638,27 @@ namespace HttpServer
             res.set_content(payload_str, "application/json");
         });
 
+        svr->Post("/clear_download_history", [&](const Request &req, Response &res)
+        {
+            int removed = 0;
+            for (size_t i = 0; i < bg_download_list.size(); i++)
+            {
+                BgDownloadData &item = bg_download_list[i];
+                if (item.state == STATE_SUCCESS || (item.state == STATE_FAILED && item.failed_attempts >= 5))
+                {
+                    item.remove_requested = true;
+                    removed++;
+                }
+            }
+
+            json_object *result = json_object_new_object();
+            JsonObjectRef result_ref(result);
+            json_object_object_add(result, "removed", json_object_new_int(removed));
+            const char *payload = json_object_to_json_string(result);
+            res.status = 200;
+            res.set_content(payload, "application/json");
+        });
+
         svr->Get("/stop", [&](const Request & /*req*/, Response & /*res*/)
         {
             stop_server = true;
@@ -627,7 +670,9 @@ namespace HttpServer
             res.status = 200;
             char version[20];
             sprintf(version, "%.2f", EZREMOTE_VERSION);
-            res.set_content(version, "text/html");
+            // Allows the console's web UI to probe this endpoint directly.
+            res.set_header("Access-Control-Allow-Origin", "*");
+            res.set_content(version, "text/plain");
         });
 
         svr->set_error_handler([](const Request & /*req*/, Response &res)
