@@ -17,6 +17,7 @@
 
 static bool in_rest_mode = false;
 static bool stop_monitoring = false;
+static pthread_t sys_event_thread;
 
 static void *SystemEventThread(void *argp)
 {
@@ -71,15 +72,18 @@ int main(int argc, char *argv[])
     }
 
     // Start system event monitoring thread
-    pthread_t sys_event_thread;
     pthread_create(&sys_event_thread, NULL, SystemEventThread, NULL);
 
     HttpServer::StartDownloadThread();
     HttpServer::Start();
     HttpServer::StopDownloadThread();
     HttpServer::ClearClientPool();
+
     stop_monitoring = true;
+    pthread_cancel(sys_event_thread);
+    pthread_detach(sys_event_thread);
+
     Util::Notify("ezRemote Server stopped.");
 
-    return 0;
+    _exit(0);
 }

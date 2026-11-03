@@ -65,6 +65,19 @@
 /* local includes */
 #include "inifile.h"
 
+/* strupr() is a Windows/MSVC extension; provide it for the portable toolchain. */
+static char *strupr(char *text)
+{
+	char *p = text;
+	while (*p)
+	{
+		*p = (char) toupper((unsigned char) *p);
+		p++;
+	}
+	return text;
+}
+
+
 /* Global Variables */
 
 struct ENTRY *Entry = NULL;
