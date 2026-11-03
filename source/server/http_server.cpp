@@ -5,6 +5,7 @@
 #include <time.h>
 #include <json-c/json.h>
 #include <pthread.h>
+#include <unistd.h>
 #include "http/httplib.h"
 #include "server/http_server.h"
 #include "clients/remote_client.h"
@@ -657,6 +658,60 @@ namespace HttpServer
             const char *payload = json_object_to_json_string(result);
             res.status = 200;
             res.set_content(payload, "application/json");
+        });
+
+        // Launches ezRemote Client through the loader and sends the browser to it.
+        svr->Get("/start_client", [&](const Request &req, Response &res)
+        {
+            // Already running? Do not disturb it.
+            bool started = false;
+            {
+                httplib::Client check("127.0.0.1", 9090);
+                check.set_connection_timeout(1, 0);
+                check.set_read_timeout(1, 0);
+                auto result = check.Get("/version");
+                started = result && result->status == 200;
+            }
+
+            if (!started)
+            {
+                httplib::Client kick("127.0.0.1", 9021);
+                kick.set_connection_timeout(5, 0);
+                kick.set_read_timeout(5, 0);
+                kick.Get("/?uri=file://data/homebrew/ezremote-client/ezremote-loader.elf");
+            }
+
+            for (int attempt = 0; attempt < 15 && !started; attempt++)
+            {
+                sleep(1);
+
+                httplib::Client check("127.0.0.1", 9090);
+                check.set_connection_timeout(1, 0);
+                check.set_read_timeout(1, 0);
+                auto result = check.Get("/version");
+                if (result && result->status == 200)
+                {
+                    started = true;
+                    break;
+                }
+            }
+
+            if (!started)
+            {
+                res.status = 200;
+                res.set_content("<html><body><p>ezRemote Client did not start. Check that the loader is running.</p></body></html>", "text/html");
+                return;
+            }
+
+            // The console the browser reached us on, on the client's own port.
+            std::string host = req.get_header_value("Host");
+            size_t colon = host.find(':');
+            if (colon != std::string::npos)
+                host = host.substr(0, colon);
+            if (host.empty())
+                host = "127.0.0.1";
+
+            res.set_redirect("http://" + host + ":9090/index.html");
         });
 
         svr->Get("/stop", [&](const Request & /*req*/, Response & /*res*/)
