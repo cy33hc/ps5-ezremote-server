@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include "http/httplib.h"
 #include "server/http_server.h"
+#include "server/icon0_png.h"
 #include "clients/remote_client.h"
 #include "clients/archiveorg.h"
 #include "clients/baseclient.h"
@@ -713,6 +714,205 @@ namespace HttpServer
                 host = "127.0.0.1";
 
             res.set_redirect("http://" + host + ":" + std::to_string(ezremote_client_port) + "/index.html");
+        });
+
+        svr->Get("/icon0.png", [&](const Request & /*req*/, Response &res)
+        {
+            res.set_content(reinterpret_cast<const char *>(icon0_png), icon0_png_len, "image/png");
+        });
+
+        svr->Get("/start_client.html", [&](const Request & /*req*/, Response &res)
+        {
+            char version[20];
+            sprintf(version, "%.2f", EZREMOTE_VERSION);
+
+            std::string page = R"HTML(<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ezRemote Client</title>
+<style>
+  :root {
+    --bg: #1b1b1c;
+    --panel: #252526;
+    --panel-alt: #2d2d30;
+    --line: #3f3f46;
+    --text: #e4e4e4;
+    --muted: #979797;
+    --accent: #1d97ec;
+    --accent-deep: #0077c8;
+    --mint: #57a64a;
+    --rose: #f14c4c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background:
+      radial-gradient(900px 500px at 50% -10%, rgba(29, 151, 236, 0.18), transparent 70%),
+      var(--bg);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .card {
+    width: 100%;
+    max-width: 460px;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    background: linear-gradient(180deg, var(--panel-alt), var(--panel) 40%);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    padding: 36px 32px 32px;
+    text-align: center;
+  }
+  .logo {
+    width: 112px;
+    height: 112px;
+    margin: 0 auto 22px;
+    display: block;
+    border-radius: 24px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+    background: var(--panel-alt);
+    object-fit: cover;
+  }
+  .logo.fallback {
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--line);
+    color: var(--accent);
+    font-size: 44px;
+    font-weight: 700;
+  }
+  h1 {
+    margin: 0;
+    font-size: 1.65rem;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+  }
+  .subtitle {
+    margin: 8px 0 0;
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+  .status {
+    margin: 22px 0 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 0.82rem;
+    color: var(--muted);
+    min-height: 20px;
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 200ms ease;
+  }
+  .dot.on { background: var(--mint); box-shadow: 0 0 10px rgba(87, 166, 74, 0.7); }
+  .dot.off { background: var(--rose); box-shadow: 0 0 10px rgba(241, 76, 76, 0.6); }
+  .launch {
+    margin-top: 26px;
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 14px 18px;
+    border: 1px solid rgba(29, 151, 236, 0.45);
+    border-radius: 12px;
+    background: linear-gradient(180deg, var(--accent), var(--accent-deep));
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 650;
+    text-decoration: none;
+    cursor: pointer;
+    transition: filter 150ms ease, transform 150ms ease;
+  }
+  .launch:hover { filter: brightness(1.1); }
+  .launch:active { transform: translateY(1px); }
+  .launch[aria-disabled="true"] { opacity: 0.55; pointer-events: none; }
+  .hint {
+    margin: 18px 0 0;
+    font-size: 0.75rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .spinner {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #fff;
+    animation: spin 700ms linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+  <main class="card">
+    <img class="logo" src="/icon0.png" alt="ezRemote Client" onerror="this.classList.add('fallback');this.outerHTML='<div class=&quot;logo fallback&quot;>ez</div>';">
+    <h1>ezRemote Client</h1>
+    <p class="subtitle">ezRemote Server v{{VERSION}}</p>
+
+    <div class="status">
+      <span class="dot" id="dot"></span>
+      <span id="status">Checking whether the client is running…</span>
+    </div>
+
+    <a class="launch" id="launch" href="/start_client">
+      <span id="launch-label">Launch ezRemote Client</span>
+    </a>
+
+    <p class="hint">
+      Starts ezRemote Client through the loader and opens its web UI.<br>
+      If it is already running, you are taken straight to it.
+    </p>
+  </main>
+
+  <script>
+    const launch = document.getElementById("launch");
+    const label = document.getElementById("launch-label");
+    const dot = document.getElementById("dot");
+    const status = document.getElementById("status");
+
+    async function probe() {
+      try {
+        const response = await fetch(":9090/version".replace(":9090", "//" + location.hostname + ":9090"), { cache: "no-store" });
+        const running = response.ok;
+        dot.className = "dot " + (running ? "on" : "off");
+        status.textContent = running ? "Client is running" : "Client is not running";
+      } catch {
+        dot.className = "dot off";
+        status.textContent = "Client is not running";
+      }
+    }
+
+    launch.addEventListener("click", () => {
+      launch.setAttribute("aria-disabled", "true");
+      label.innerHTML = '<span class="spinner"></span> Starting…';
+      status.textContent = "Launching the client, this can take a few seconds";
+    });
+
+    probe();
+    setInterval(probe, 5000);
+  </script>
+</body>
+</html>)HTML";
+
+            const char *marker = "{{VERSION}}";
+            size_t pos = page.find(marker);
+            if (pos != std::string::npos)
+                page.replace(pos, strlen(marker), version);
+
+            res.status = 200;
+            res.set_header("Cache-Control", "no-store");
+            res.set_content(page, "text/html");
         });
 
         svr->Get("/stop", [&](const Request & /*req*/, Response & /*res*/)
