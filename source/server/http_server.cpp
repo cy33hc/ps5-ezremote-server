@@ -883,7 +883,7 @@ namespace HttpServer
 
     async function probe() {
       try {
-        const response = await fetch(":9090/version".replace(":9090", "//" + location.hostname + ":9090"), { cache: "no-store" });
+        const response = await fetch(`//${location.hostname}:{{CLIENT_PORT}}/version`, { cache: "no-store" });
         const running = response.ok;
         dot.className = "dot " + (running ? "on" : "off");
         status.textContent = running ? "Client is running" : "Client is not running";
@@ -909,6 +909,15 @@ namespace HttpServer
             size_t pos = page.find(marker);
             if (pos != std::string::npos)
                 page.replace(pos, strlen(marker), version);
+
+            // The launch page probes the client's web UI directly, so it needs
+            // the port the client is currently configured on rather than the
+            // default baked into the template.
+            const char *port_marker = "{{CLIENT_PORT}}";
+            std::string port = std::to_string(ezremote_client_port);
+            size_t port_pos = page.find(port_marker);
+            if (port_pos != std::string::npos)
+                page.replace(port_pos, strlen(port_marker), port);
 
             res.status = 200;
             res.set_header("Cache-Control", "no-store");
